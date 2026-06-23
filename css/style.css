@@ -222,7 +222,7 @@ h1,h2,h3,h4{font-family:var(--ff-display);font-weight:800;letter-spacing:-0.02em
 .footer{background:var(--c-ink);color:#C7C0AF;padding:48px 0 0}
 .footer__inner{display:grid;grid-template-columns:1.2fr 2fr;gap:40px;padding-bottom:36px}
 .footer__brand p{font-size:14px;color:#A9A395;max-width:340px;margin:14px 0 0}
-.footer__logo{height:96px;width:auto;filter:brightness(0) invert(1) opacity(.95)}
+.footer__logo{height:140px;width:auto;display:block;margin-left:-8px}
 .footer__cols{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
 .footer__cols h4{font-family:var(--ff-display);font-size:13px;font-weight:800;color:#fff;letter-spacing:.08em;text-transform:uppercase;margin-bottom:14px}
 .footer__cols a{display:block;font-size:14px;color:#C7C0AF;margin-bottom:8px;transition:color .15s}
