@@ -131,6 +131,53 @@
       <img src="assets/hero-gato.png" alt="Ração para gatos — Premier Gatos, Whiskas, Royal Canin Feline" class="hero__slide" data-slide="1">
       <img src="assets/hero-peixe.png" alt="Ração para peixes — Alcon, Tetra, Nutricon" class="hero__slide" data-slide="2">
       <img src="assets/hero-porco.png" alt="Ração para suínos — Comigo e demais" class="hero__slide" data-slide="3">
+
+      <!-- Painel de marcas (uma por slide) -->
+      <div class="hero__brands is-active" data-panel="0">
+        <span class="hero__brands-eyebrow">Marcas para Cães</span>
+        <ul class="hero__brands-list">
+          <li>Premier</li>
+          <li>Golden</li>
+          <li>Royal Canin</li>
+          <li>Pedigree</li>
+          <li>Magnus</li>
+          <li>Bravo</li>
+        </ul>
+      </div>
+      <div class="hero__brands" data-panel="1">
+        <span class="hero__brands-eyebrow">Marcas para Gatos</span>
+        <ul class="hero__brands-list">
+          <li>Premier Gatos</li>
+          <li>Whiskas</li>
+          <li>Royal Canin</li>
+          <li>Golden Gatos</li>
+          <li>Magnus Cat</li>
+          <li>N&amp;D</li>
+        </ul>
+      </div>
+      <div class="hero__brands" data-panel="2">
+        <span class="hero__brands-eyebrow">Marcas para Peixes</span>
+        <ul class="hero__brands-list">
+          <li>Alcon</li>
+          <li>TetraMin</li>
+          <li>Nutricon</li>
+          <li>Sera</li>
+          <li>Poytara</li>
+          <li>Mbreda</li>
+        </ul>
+      </div>
+      <div class="hero__brands" data-panel="3">
+        <span class="hero__brands-eyebrow">Marcas para Suínos e Aves</span>
+        <ul class="hero__brands-list">
+          <li>Comigo</li>
+          <li>Nutrópica</li>
+          <li>Megazoo</li>
+          <li>Presence</li>
+          <li>Guabi</li>
+          <li>Socil</li>
+        </ul>
+      </div>
+
       <div class="hero__dots" aria-hidden="true">
         <span class="hero__dot is-active" data-go="0"></span>
         <span class="hero__dot" data-go="1"></span>
@@ -365,9 +412,11 @@ function abrirBuscaWhats(q){
   var dots = document.querySelectorAll('.hero__dot');
   if(slides.length < 2) return;
   var idx = 0, timer = null;
+  var panels = document.querySelectorAll('.hero__brands');
   function go(n){
     idx = (n + slides.length) % slides.length;
     slides.forEach(function(s,i){ s.classList.toggle('is-active', i === idx); });
+    panels.forEach(function(p,i){ p.classList.toggle('is-active', i === idx); });
     dots.forEach(function(d,i){ d.classList.toggle('is-active', i === idx); });
   }
   function next(){ go(idx + 1); }
