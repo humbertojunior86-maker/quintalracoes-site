@@ -1,0 +1,25 @@
+{
+  "facebook_page": {
+    "id": "366963816491714",
+    "name": "Quintal Rações e Pet Shop",
+    "followers": 102
+  },
+  "instagram_business_account": {
+    "id": "17841409335086042",
+    "username": "quintalracoes",
+    "name": "Quintal Rações e Petshop",
+    "followers_count": 760,
+    "media_count": 48
+  },
+  "meta_app": {
+    "id": "892497847240581",
+    "name": "quintal Racoes Automacao"
+  },
+  "system_user": {
+    "id": "122095433127378386",
+    "name": "AutomacaoQuintal"
+  },
+  "graph_api_version": "v25.0",
+  "credentials_handle": "custom-cred:graph.facebook.com",
+  "notes": "System user token (graph.facebook.com cred) é o user token. Para publicar use o page_access_token retornado por /me/accounts."
+}
