@@ -123,26 +123,21 @@
   </div>
 </section>
 
-<!-- =========== HERO BANNER =========== -->
+<!-- =========== HERO BANNER (CARROSSEL) =========== -->
 <section class="hero">
-  <div class="container hero__inner">
+  <div class="container">
     <a href="https://wa.me/5567999638298?text=Ol%C3%A1!%20Vim%20pelo%20site%20do%20Quintal" target="_blank" rel="noopener" class="hero__banner" aria-label="Quintal Rações e Pet Shop — fale no WhatsApp">
-      <img src="assets/hero-banner.png" alt="Quintal Rações e Pet Shop">
-      <img src="assets/logo-transparente.png" alt="Quintal Rações" class="hero__logo">
+      <img src="assets/hero-cao.png" alt="Ração para cães — Premier, Golden, Royal Canin" class="hero__slide is-active" data-slide="0">
+      <img src="assets/hero-gato.png" alt="Ração para gatos — Premier Gatos, Whiskas, Royal Canin Feline" class="hero__slide" data-slide="1">
+      <img src="assets/hero-peixe.png" alt="Ração para peixes — Alcon, Tetra, Nutricon" class="hero__slide" data-slide="2">
+      <img src="assets/hero-porco.png" alt="Ração para suínos — Comigo e demais" class="hero__slide" data-slide="3">
+      <div class="hero__dots" aria-hidden="true">
+        <span class="hero__dot is-active" data-go="0"></span>
+        <span class="hero__dot" data-go="1"></span>
+        <span class="hero__dot" data-go="2"></span>
+        <span class="hero__dot" data-go="3"></span>
+      </div>
     </a>
-
-    <aside class="hero__side">
-      <div class="hero__card hero__card--mustard">
-        <span class="hero__tag">Frete</span>
-        <h3>Entrega rápida</h3>
-        <p>Chapadão do Sul e arredores. Combine pelo WhatsApp.</p>
-      </div>
-      <div class="hero__card hero__card--dark">
-        <span class="hero__tag">Pix</span>
-        <h3>Desconto à vista</h3>
-        <p>Pague no Pix e leve mais ração pra casa.</p>
-      </div>
-    </aside>
   </div>
 </section>
 
@@ -363,6 +358,30 @@ function abrirBuscaWhats(q){
   var txt = q && q.trim() ? 'Ol%C3%A1!%20Procuro%20por%3A%20' + encodeURIComponent(q.trim()) : 'Ol%C3%A1!%20Vim%20pelo%20site';
   window.open('https://wa.me/5567999638298?text=' + txt, '_blank');
 }
+
+// Carrossel hero
+(function(){
+  var slides = document.querySelectorAll('.hero__slide');
+  var dots = document.querySelectorAll('.hero__dot');
+  if(slides.length < 2) return;
+  var idx = 0, timer = null;
+  function go(n){
+    idx = (n + slides.length) % slides.length;
+    slides.forEach(function(s,i){ s.classList.toggle('is-active', i === idx); });
+    dots.forEach(function(d,i){ d.classList.toggle('is-active', i === idx); });
+  }
+  function next(){ go(idx + 1); }
+  function start(){ stop(); timer = setInterval(next, 4500); }
+  function stop(){ if(timer){ clearInterval(timer); timer = null; } }
+  dots.forEach(function(d){
+    d.addEventListener('click', function(e){
+      e.preventDefault(); e.stopPropagation();
+      go(parseInt(d.getAttribute('data-go'),10));
+      start();
+    });
+  });
+  start();
+})();
 </script>
 </body>
 </html>
