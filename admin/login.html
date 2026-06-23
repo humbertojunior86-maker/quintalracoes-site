@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Login — Quintal Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/admin/css/admin.css">
+  <link rel="icon" href="/assets/favicon.png">
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="login-logo">
+        <h1>QUINTAL</h1>
+        <small>Painel administrativo</small>
+      </div>
+
+      <div id="msg-box" style="display:none; padding:10px 12px; border-radius:6px; margin-bottom:12px; font-size:13px;"></div>
+
+      <form id="login-form">
+        <div class="form-group">
+          <label class="form-label" for="email">E-mail</label>
+          <input type="email" id="email" class="form-control" required autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="senha">Senha</label>
+          <input type="password" id="senha" class="form-control" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn btn--mostarda btn--block" id="btn-entrar">Entrar</button>
+      </form>
+
+      <p style="margin-top:18px; font-size:12px; color:#888; text-align:center;">
+        Esqueceu a senha?
+        <a href="#" id="reset-link">Recuperar acesso</a>
+      </p>
+    </div>
+  </div>
+
+  <script src="/admin/js/config.js"></script>
+  <script type="module">
+    import { supabase, toast } from '/admin/js/supabase-client.js';
+
+    // Mensagem da URL
+    const params = new URLSearchParams(location.search);
+    const msg = params.get('msg');
+    if (msg) {
+      const box = document.getElementById('msg-box');
+      box.style.display = 'block';
+      if (msg === 'inativo') {
+        box.style.background = '#fdecea'; box.style.color = '#C0392B';
+        box.textContent = 'Sua conta está inativa. Procure o administrador.';
+      } else if (msg === 'sair') {
+        box.style.background = '#e6f4ec'; box.style.color = '#1E8449';
+        box.textContent = 'Você saiu com sucesso.';
+      }
+    }
+
+    // Se já logado, redireciona
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      window.location.href = '/admin/dashboard.html';
+    }
+
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('btn-entrar');
+      const email = document.getElementById('email').value.trim();
+      const senha = document.getElementById('senha').value;
+      btn.disabled = true; btn.textContent = 'Entrando...';
+
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password: senha });
+
+      if (error) {
+        toast(error.message || 'Erro ao entrar', 'error');
+        btn.disabled = false; btn.textContent = 'Entrar';
+        return;
+      }
+      window.location.href = '/admin/dashboard.html';
+    });
+
+    document.getElementById('reset-link').addEventListener('click', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('email').value.trim();
+      if (!email) { toast('Digite o e-mail primeiro', 'error'); return; }
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin + '/admin/reset-senha.html',
+      });
+      if (error) toast(error.message, 'error');
+      else toast('E-mail de recuperação enviado', 'success');
+    });
+  </script>
+</body>
+</html>

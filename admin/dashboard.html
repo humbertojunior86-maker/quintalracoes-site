@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Início — Quintal Admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/admin/css/admin.css">
+  <link rel="icon" href="/assets/favicon.png">
+</head>
+<body>
+  <div class="app">
+    <main class="main">
+      <div class="page-header">
+        <div>
+          <div class="breadcrumb">Painel administrativo</div>
+          <h1 id="saudacao">Olá</h1>
+        </div>
+        <a href="/" class="btn">↗ Ver site público</a>
+      </div>
+
+      <div class="kpis" id="kpis"><div class="loading">Carregando…</div></div>
+
+      <div class="card">
+        <h3 style="margin-top:0; font-family:'Plus Jakarta Sans'">Atalhos rápidos</h3>
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap:12px; margin-top:12px;">
+          <a href="/admin/produtos.html" class="btn btn--mostarda">+ Adicionar produto</a>
+          <a href="/admin/precos.html" class="btn">Atualizar preços</a>
+          <a href="/admin/banners.html" class="btn">Editar banners do site</a>
+          <a href="/admin/produtos.html?destaque=1" class="btn">Produtos em destaque</a>
+        </div>
+      </div>
+
+      <div class="card" id="ultimas-alteracoes-box" style="display:none;">
+        <h3 style="margin-top:0; font-family:'Plus Jakarta Sans'">Últimas alterações de preço</h3>
+        <div id="ultimas-alteracoes"></div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/admin/js/config.js"></script>
+  <script type="module">
+    import { supabase, requireAuth, fmtBRL } from '/admin/js/supabase-client.js';
+    import { renderSidebar } from '/admin/js/sidebar.js';
+
+    const auth = await requireAuth();
+    if (!auth) throw new Error('sem auth');
+    renderSidebar(auth.perfil, 'dashboard');
+
+    document.getElementById('saudacao').textContent =
+      'Olá, ' + (auth.perfil.nome?.split(' ')[0] || 'admin');
+
+    // KPIs
+    const [prods, prodsAtivos, prodsDestaque, marcasAtivas, bannersAtivos] = await Promise.all([
+      supabase.from('produtos').select('id', { count: 'exact', head: true }),
+      supabase.from('produtos').select('id', { count: 'exact', head: true }).eq('ativo', true),
+      supabase.from('produtos').select('id', { count: 'exact', head: true }).eq('destaque', true).eq('ativo', true),
+      supabase.from('marcas').select('id', { count: 'exact', head: true }).eq('ativo', true),
+      supabase.from('banners_hero').select('id', { count: 'exact', head: true }).eq('ativo', true),
+    ]);
+
+    document.getElementById('kpis').innerHTML = `
+      <div class="kpi">
+        <div class="kpi__label">Produtos cadastrados</div>
+        <div class="kpi__value">${prods.count ?? 0}</div>
+        <div class="kpi__delta">${prodsAtivos.count ?? 0} ativos</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi__label">Em destaque na home</div>
+        <div class="kpi__value">${prodsDestaque.count ?? 0}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi__label">Marcas ativas</div>
+        <div class="kpi__value">${marcasAtivas.count ?? 0}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi__label">Banners ativos</div>
+        <div class="kpi__value">${bannersAtivos.count ?? 0}</div>
+      </div>
+    `;
+
+    // Últimas mudanças de preço (só admin tem acesso)
+    if (auth.perfil.role === 'admin') {
+      const { data: hist } = await supabase
+        .from('historico_precos')
+        .select('id, alterado_em, preco_normal_old, preco_normal_new, produtos(nome)')
+        .order('alterado_em', { ascending: false })
+        .limit(10);
+
+      if (hist && hist.length > 0) {
+        document.getElementById('ultimas-alteracoes-box').style.display = 'block';
+        document.getElementById('ultimas-alteracoes').innerHTML = `
+          <table class="table">
+            <thead>
+              <tr><th>Quando</th><th>Produto</th><th>De</th><th>Para</th></tr>
+            </thead>
+            <tbody>
+              ${hist.map(h => `
+                <tr>
+                  <td>${new Date(h.alterado_em).toLocaleString('pt-BR')}</td>
+                  <td>${h.produtos?.nome || '—'}</td>
+                  <td>${fmtBRL(h.preco_normal_old)}</td>
+                  <td><strong>${fmtBRL(h.preco_normal_new)}</strong></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `;
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Usuários — Quintal Admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/admin/css/admin.css">
+</head>
+<body>
+  <div class="app">
+    <main class="main">
+      <div class="page-header">
+        <div>
+          <div class="breadcrumb">Painel · Usuários</div>
+          <h1>Usuários do sistema</h1>
+        </div>
+      </div>
+
+      <div class="card" style="background:#fef3d4; padding:12px 16px;">
+        <strong>Como adicionar um vendedor:</strong> peça pra ele se cadastrar em
+        <a href="/admin/cadastro.html">/admin/cadastro.html</a>, depois aprove aqui mudando o status para "ativo" e o nível desejado.
+      </div>
+
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>E-mail</th>
+              <th>Nível</th>
+              <th>Status</th>
+              <th>Criado em</th>
+              <th style="text-align:right">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="lista"></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <script src="/admin/js/config.js"></script>
+  <script type="module">
+    import { supabase, requireAuth, toast } from '/admin/js/supabase-client.js';
+    import { renderSidebar } from '/admin/js/sidebar.js';
+
+    const auth = await requireAuth(['admin']);
+    if (!auth) throw new Error('sem auth');
+    renderSidebar(auth.perfil, 'usuarios');
+
+    function escapeHtml(s) {
+      return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+    }
+
+    async function load() {
+      const { data, error } = await supabase.from('perfis').select('*').order('created_at', { ascending: false });
+      if (error) return toast(error.message, 'error');
+      document.getElementById('lista').innerHTML = (data || []).map(p => `
+        <tr>
+          <td><strong>${escapeHtml(p.nome)}</strong></td>
+          <td>${escapeHtml(p.email || '—')}</td>
+          <td>
+            <select class="form-control" style="padding:5px 8px; font-size:12px;" data-role="${p.id}" ${p.id === auth.perfil.id ? 'disabled' : ''}>
+              <option value="vendedor" ${p.role === 'vendedor' ? 'selected' : ''}>Vendedor</option>
+              <option value="admin"    ${p.role === 'admin'    ? 'selected' : ''}>Administrador</option>
+            </select>
+          </td>
+          <td>
+            ${p.id === auth.perfil.id
+              ? '<span class="tag tag--success">você</span>'
+              : `<label style="display:flex; gap:4px; align-items:center;">
+                  <input type="checkbox" data-ativo="${p.id}" ${p.ativo ? 'checked' : ''}>
+                  ${p.ativo ? '<span class="tag tag--success">ativo</span>' : '<span class="tag tag--danger">inativo</span>'}
+                 </label>`
+            }
+          </td>
+          <td>${new Date(p.created_at).toLocaleDateString('pt-BR')}</td>
+          <td><div class="actions">
+            ${p.id !== auth.perfil.id ? `<button class="btn btn--sm btn--danger" data-del="${p.id}">Excluir</button>` : ''}
+          </div></td>
+        </tr>
+      `).join('') || '<tr><td colspan="6"><div class="empty">Sem usuários cadastrados.</div></td></tr>';
+
+      document.querySelectorAll('[data-role]').forEach(s => s.onchange = async () => {
+        const { error } = await supabase.from('perfis').update({ role: s.value }).eq('id', s.dataset.role);
+        if (error) toast(error.message,'error'); else toast('Nível atualizado','success');
+      });
+      document.querySelectorAll('[data-ativo]').forEach(c => c.onchange = async () => {
+        const { error } = await supabase.from('perfis').update({ ativo: c.checked }).eq('id', c.dataset.ativo);
+        if (error) toast(error.message,'error'); else { toast('Status atualizado','success'); load(); }
+      });
+      document.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+        if (!confirm('Excluir este perfil? O usuário não conseguirá mais entrar.')) return;
+        const { error } = await supabase.from('perfis').delete().eq('id', b.dataset.del);
+        if (error) toast(error.message,'error'); else { toast('Excluído','success'); load(); }
+      });
+    }
+
+    await load();
+  </script>
+</body>
+</html>

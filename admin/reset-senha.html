@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Nova senha — Quintal Admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/admin/css/admin.css">
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="login-logo">
+        <h1>QUINTAL</h1>
+        <small>Definir nova senha</small>
+      </div>
+      <form id="form">
+        <div class="form-group">
+          <label class="form-label">Nova senha</label>
+          <input type="password" class="form-control" id="senha" minlength="6" required>
+        </div>
+        <button type="submit" class="btn btn--mostarda btn--block" id="btn">Atualizar senha</button>
+      </form>
+    </div>
+  </div>
+  <script src="/admin/js/config.js"></script>
+  <script type="module">
+    import { supabase, toast } from '/admin/js/supabase-client.js';
+    document.getElementById('form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const btn = document.getElementById('btn');
+      btn.disabled = true; btn.textContent = 'Salvando…';
+      const senha = document.getElementById('senha').value;
+      const { error } = await supabase.auth.updateUser({ password: senha });
+      btn.disabled = false; btn.textContent = 'Atualizar senha';
+      if (error) return toast(error.message, 'error');
+      toast('Senha atualizada', 'success');
+      setTimeout(() => window.location.href = '/admin/dashboard.html', 1500);
+    });
+  </script>
+</body>
+</html>

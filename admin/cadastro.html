@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Cadastro — Quintal Admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/admin/css/admin.css">
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="login-logo">
+        <h1>QUINTAL</h1>
+        <small>Cadastro</small>
+      </div>
+
+      <p style="font-size:13px; color:var(--muted); margin-bottom:16px;">
+        Após o cadastro, peça ao administrador para aprovar seu acesso.
+      </p>
+
+      <form id="form">
+        <div class="form-group">
+          <label class="form-label">Seu nome</label>
+          <input class="form-control" id="nome" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">E-mail</label>
+          <input type="email" class="form-control" id="email" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Senha</label>
+          <input type="password" class="form-control" id="senha" minlength="6" required>
+          <div class="form-help">Mínimo 6 caracteres.</div>
+        </div>
+        <button type="submit" class="btn btn--mostarda btn--block" id="btn">Criar conta</button>
+      </form>
+
+      <p style="margin-top:18px; text-align:center; font-size:12px;">
+        Já tem conta? <a href="/admin/login.html">Entrar</a>
+      </p>
+    </div>
+  </div>
+
+  <script src="/admin/js/config.js"></script>
+  <script type="module">
+    import { supabase, toast } from '/admin/js/supabase-client.js';
+
+    document.getElementById('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('btn');
+      btn.disabled = true; btn.textContent = 'Criando…';
+      const nome = document.getElementById('nome').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const senha = document.getElementById('senha').value;
+
+      const { error } = await supabase.auth.signUp({
+        email, password: senha,
+        options: { data: { nome } },
+      });
+      btn.disabled = false; btn.textContent = 'Criar conta';
+
+      if (error) return toast(error.message, 'error');
+      toast('Conta criada. Aguarde aprovação do administrador.', 'success');
+      setTimeout(() => window.location.href = '/admin/login.html', 2500);
+    });
+  </script>
+</body>
+</html>

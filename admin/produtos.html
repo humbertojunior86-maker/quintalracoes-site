@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Produtos — Quintal Admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/admin/css/admin.css">
+</head>
+<body>
+  <div class="app">
+    <main class="main">
+      <div class="page-header">
+        <div>
+          <div class="breadcrumb">Painel · Produtos</div>
+          <h1>Produtos</h1>
+        </div>
+        <button class="btn btn--mostarda" id="btn-novo">+ Novo produto</button>
+      </div>
+
+      <div class="toolbar">
+        <input class="search" id="search" placeholder="Buscar por nome…">
+        <select id="filtro-categoria"><option value="">Todas categorias</option></select>
+        <select id="filtro-marca"><option value="">Todas marcas</option></select>
+        <select id="filtro-status">
+          <option value="">Todos</option>
+          <option value="true">Ativos</option>
+          <option value="false">Inativos</option>
+        </select>
+        <select id="filtro-destaque">
+          <option value="">Destaque: todos</option>
+          <option value="true">Só em destaque</option>
+        </select>
+        <div class="spacer"></div>
+        <span id="contador" style="color:var(--muted); font-size:12px;"></span>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th style="width:60px"></th>
+              <th>Nome</th>
+              <th>Categoria</th>
+              <th>Marca</th>
+              <th>Preço</th>
+              <th>Estoque</th>
+              <th>Status</th>
+              <th style="text-align:right">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="lista"></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <!-- MODAL PRODUTO -->
+  <div class="modal-bg" id="modal-bg">
+    <div class="modal">
+      <div class="modal__header">
+        <h2 id="modal-title">Novo produto</h2>
+        <button class="modal__close" data-close>×</button>
+      </div>
+      <form id="form-produto">
+        <input type="hidden" id="produto-id">
+
+        <div class="form-group">
+          <label class="form-label">Foto</label>
+          <label class="uploader" for="produto-foto-input">
+            <input type="file" id="produto-foto-input" accept="image/*">
+            <img id="produto-foto-preview" class="preview" style="display:none">
+            <div id="produto-foto-text">Clique para enviar foto (JPG, PNG, WebP)</div>
+          </label>
+          <input type="hidden" id="produto-foto-url">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Nome *</label>
+          <input class="form-control" id="produto-nome" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Descrição</label>
+          <textarea class="form-control" id="produto-descricao" rows="2"></textarea>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Categoria</label>
+            <select class="form-control" id="produto-categoria"></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Marca</label>
+            <select class="form-control" id="produto-marca"></select>
+          </div>
+        </div>
+
+        <div class="form-row--3" style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px;">
+          <div class="form-group">
+            <label class="form-label">Preço normal (R$)</label>
+            <input type="number" step="0.01" min="0" class="form-control" id="produto-preco-normal">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Preço Pix (R$)</label>
+            <input type="number" step="0.01" min="0" class="form-control" id="produto-preco-pix">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Promocional (R$)</label>
+            <input type="number" step="0.01" min="0" class="form-control" id="produto-preco-promo">
+          </div>
+        </div>
+
+        <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+          <div class="form-group">
+            <label class="form-label">Promo válida de</label>
+            <input type="datetime-local" class="form-control" id="produto-promo-inicio">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Promo válida até</label>
+            <input type="datetime-local" class="form-control" id="produto-promo-fim">
+          </div>
+        </div>
+
+        <div class="form-row--3" style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px;">
+          <div class="form-group">
+            <label class="form-label">Unidade</label>
+            <select class="form-control" id="produto-unidade">
+              <option value="kg">kg</option>
+              <option value="un">unidade</option>
+              <option value="saco">saco</option>
+              <option value="pacote">pacote</option>
+              <option value="cx">caixa</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Estoque</label>
+            <input type="number" min="0" class="form-control" id="produto-estoque" value="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Ordem</label>
+            <input type="number" min="0" class="form-control" id="produto-ordem" value="0">
+          </div>
+        </div>
+
+        <div class="form-group" style="display:flex; gap:18px;">
+          <label style="display:flex; align-items:center; gap:6px;">
+            <input type="checkbox" id="produto-ativo" checked> Ativo
+          </label>
+          <label style="display:flex; align-items:center; gap:6px;">
+            <input type="checkbox" id="produto-destaque"> Mostrar em destaque na home
+          </label>
+        </div>
+
+        <div class="modal__actions">
+          <button type="button" class="btn" data-close>Cancelar</button>
+          <button type="submit" class="btn btn--primary" id="btn-salvar">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/admin/js/config.js"></script>
+  <script type="module">
+    import { supabase, requireAuth, fmtBRL, uploadImage, toast } from '/admin/js/supabase-client.js';
+    import { renderSidebar } from '/admin/js/sidebar.js';
+
+    const auth = await requireAuth();
+    if (!auth) throw new Error('sem auth');
+    renderSidebar(auth.perfil, 'produtos');
+    const isAdmin = auth.perfil.role === 'admin';
+
+    let categorias = [], marcas = [];
+
+    // Carrega categorias e marcas (selects)
+    async function loadOptions() {
+      const [c, m] = await Promise.all([
+        supabase.from('categorias').select('id, nome').order('ordem'),
+        supabase.from('marcas').select('id, nome').order('ordem'),
+      ]);
+      categorias = c.data || [];
+      marcas = m.data || [];
+
+      const optsCat = '<option value="">— sem categoria —</option>' + categorias.map(x => `<option value="${x.id}">${x.nome}</option>`).join('');
+      const optsMar = '<option value="">— sem marca —</option>' + marcas.map(x => `<option value="${x.id}">${x.nome}</option>`).join('');
+
+      document.getElementById('produto-categoria').innerHTML = optsCat;
+      document.getElementById('produto-marca').innerHTML = optsMar;
+
+      document.getElementById('filtro-categoria').innerHTML = '<option value="">Todas categorias</option>' + categorias.map(x => `<option value="${x.id}">${x.nome}</option>`).join('');
+      document.getElementById('filtro-marca').innerHTML = '<option value="">Todas marcas</option>' + marcas.map(x => `<option value="${x.id}">${x.nome}</option>`).join('');
+    }
+
+    async function loadProdutos() {
+      const search = document.getElementById('search').value.trim();
+      const fc = document.getElementById('filtro-categoria').value;
+      const fm = document.getElementById('filtro-marca').value;
+      const fs = document.getElementById('filtro-status').value;
+      const fd = document.getElementById('filtro-destaque').value;
+
+      let q = supabase.from('produtos')
+        .select('id, nome, foto_url, categoria_id, marca_id, preco_normal, preco_pix, preco_promocional, estoque, ativo, destaque, ordem, categorias(nome), marcas(nome)')
+        .order('ordem', { ascending: true })
+        .order('id', { ascending: true });
+
+      if (search) q = q.ilike('nome', `%${search}%`);
+      if (fc) q = q.eq('categoria_id', fc);
+      if (fm) q = q.eq('marca_id', fm);
+      if (fs !== '') q = q.eq('ativo', fs === 'true');
+      if (fd === 'true') q = q.eq('destaque', true);
+
+      const { data, error } = await q;
+      if (error) { toast(error.message, 'error'); return; }
+
+      document.getElementById('contador').textContent = `${data.length} produtos`;
+      document.getElementById('lista').innerHTML = data.length === 0
+        ? `<tr><td colspan="8"><div class="empty"><h3>Nenhum produto encontrado</h3><p>Ajuste os filtros ou clique em "Novo produto".</p></div></td></tr>`
+        : data.map(p => `
+          <tr>
+            <td>${p.foto_url ? `<img class="thumb" src="${p.foto_url}">` : `<div class="thumb"></div>`}</td>
+            <td>
+              <strong>${escapeHtml(p.nome)}</strong>
+              ${p.destaque ? '<span class="tag tag--mostarda" style="margin-left:6px;">destaque</span>' : ''}
+            </td>
+            <td>${p.categorias?.nome ?? '—'}</td>
+            <td>${p.marcas?.nome ?? '—'}</td>
+            <td>
+              <strong>${fmtBRL(p.preco_normal)}</strong>
+              ${p.preco_pix ? `<br><small style="color:var(--muted)">Pix ${fmtBRL(p.preco_pix)}</small>` : ''}
+              ${p.preco_promocional ? `<br><small style="color:var(--danger)">Promo ${fmtBRL(p.preco_promocional)}</small>` : ''}
+            </td>
+            <td>${p.estoque ?? 0}</td>
+            <td>${p.ativo ? '<span class="tag tag--success">ativo</span>' : '<span class="tag tag--danger">inativo</span>'}</td>
+            <td>
+              <div class="actions">
+                <button class="btn btn--sm" data-edit="${p.id}">Editar</button>
+                ${isAdmin ? `<button class="btn btn--sm btn--danger" data-del="${p.id}">×</button>` : ''}
+              </div>
+            </td>
+          </tr>
+        `).join('');
+
+      // Handlers
+      document.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openModal(b.dataset.edit));
+      document.querySelectorAll('[data-del]').forEach(b => b.onclick = () => deletarProduto(b.dataset.del));
+    }
+
+    function escapeHtml(s) {
+      return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+    }
+
+    // MODAL
+    const modalBg = document.getElementById('modal-bg');
+    function openModal(id = null) {
+      const form = document.getElementById('form-produto');
+      form.reset();
+      document.getElementById('produto-foto-preview').style.display = 'none';
+      document.getElementById('produto-foto-text').textContent = 'Clique para enviar foto (JPG, PNG, WebP)';
+      document.getElementById('produto-foto-url').value = '';
+      document.getElementById('produto-id').value = '';
+      document.getElementById('modal-title').textContent = 'Novo produto';
+
+      if (id) {
+        carregarProduto(id);
+      }
+      modalBg.classList.add('is-open');
+    }
+    function closeModal() { modalBg.classList.remove('is-open'); }
+    document.querySelectorAll('[data-close]').forEach(b => b.onclick = closeModal);
+    modalBg.addEventListener('click', e => { if (e.target === modalBg) closeModal(); });
+    document.getElementById('btn-novo').onclick = () => openModal();
+
+    async function carregarProduto(id) {
+      const { data, error } = await supabase.from('produtos').select('*').eq('id', id).single();
+      if (error) { toast(error.message, 'error'); return; }
+      document.getElementById('modal-title').textContent = 'Editar produto: ' + data.nome;
+      document.getElementById('produto-id').value = data.id;
+      document.getElementById('produto-nome').value = data.nome || '';
+      document.getElementById('produto-descricao').value = data.descricao || '';
+      document.getElementById('produto-categoria').value = data.categoria_id || '';
+      document.getElementById('produto-marca').value = data.marca_id || '';
+      document.getElementById('produto-preco-normal').value = data.preco_normal ?? '';
+      document.getElementById('produto-preco-pix').value = data.preco_pix ?? '';
+      document.getElementById('produto-preco-promo').value = data.preco_promocional ?? '';
+      document.getElementById('produto-promo-inicio').value = data.promo_inicio ? data.promo_inicio.slice(0,16) : '';
+      document.getElementById('produto-promo-fim').value = data.promo_fim ? data.promo_fim.slice(0,16) : '';
+      document.getElementById('produto-unidade').value = data.unidade || 'kg';
+      document.getElementById('produto-estoque').value = data.estoque ?? 0;
+      document.getElementById('produto-ordem').value = data.ordem ?? 0;
+      document.getElementById('produto-ativo').checked = !!data.ativo;
+      document.getElementById('produto-destaque').checked = !!data.destaque;
+      document.getElementById('produto-foto-url').value = data.foto_url || '';
+      if (data.foto_url) {
+        const img = document.getElementById('produto-foto-preview');
+        img.src = data.foto_url;
+        img.style.display = 'block';
+        document.getElementById('produto-foto-text').textContent = 'Clique para trocar a foto';
+      }
+    }
+
+    // Upload de foto
+    document.getElementById('produto-foto-input').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const txt = document.getElementById('produto-foto-text');
+      txt.textContent = 'Enviando…';
+      try {
+        const url = await uploadImage('produtos', file);
+        document.getElementById('produto-foto-url').value = url;
+        const img = document.getElementById('produto-foto-preview');
+        img.src = url; img.style.display = 'block';
+        txt.textContent = 'Foto carregada. Clique para trocar.';
+      } catch (err) {
+        toast('Erro no upload: ' + err.message, 'error');
+        txt.textContent = 'Clique para enviar foto (JPG, PNG, WebP)';
+      }
+    });
+
+    // Submit
+    document.getElementById('form-produto').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('btn-salvar');
+      btn.disabled = true; btn.textContent = 'Salvando…';
+
+      const id = document.getElementById('produto-id').value;
+      const nome = document.getElementById('produto-nome').value.trim();
+      const slug = nome.toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+
+      const payload = {
+        nome,
+        slug: id ? undefined : slug, // mantém slug original no update
+        descricao: document.getElementById('produto-descricao').value.trim() || null,
+        categoria_id: document.getElementById('produto-categoria').value || null,
+        marca_id: document.getElementById('produto-marca').value || null,
+        foto_url: document.getElementById('produto-foto-url').value || null,
+        unidade: document.getElementById('produto-unidade').value,
+        preco_normal: parseNum('produto-preco-normal'),
+        preco_pix: parseNum('produto-preco-pix'),
+        preco_promocional: parseNum('produto-preco-promo'),
+        promo_inicio: document.getElementById('produto-promo-inicio').value || null,
+        promo_fim: document.getElementById('produto-promo-fim').value || null,
+        estoque: parseInt(document.getElementById('produto-estoque').value || '0', 10),
+        ordem: parseInt(document.getElementById('produto-ordem').value || '0', 10),
+        ativo: document.getElementById('produto-ativo').checked,
+        destaque: document.getElementById('produto-destaque').checked,
+      };
+
+      let res;
+      if (id) {
+        res = await supabase.from('produtos').update(payload).eq('id', id);
+      } else {
+        // Garante slug único se já existir
+        const { data: ex } = await supabase.from('produtos').select('id').eq('slug', slug).maybeSingle();
+        if (ex) payload.slug = slug + '-' + Date.now().toString(36);
+        res = await supabase.from('produtos').insert(payload);
+      }
+
+      btn.disabled = false; btn.textContent = 'Salvar';
+
+      if (res.error) { toast(res.error.message, 'error'); return; }
+      toast(id ? 'Produto atualizado' : 'Produto criado', 'success');
+      closeModal();
+      loadProdutos();
+    });
+
+    function parseNum(id) {
+      const v = document.getElementById(id).value;
+      return v === '' ? null : parseFloat(v);
+    }
+
+    async function deletarProduto(id) {
+      if (!confirm('Excluir este produto? Esta ação não pode ser desfeita.')) return;
+      const { error } = await supabase.from('produtos').delete().eq('id', id);
+      if (error) { toast(error.message, 'error'); return; }
+      toast('Produto excluído', 'success');
+      loadProdutos();
+    }
+
+    // Filtros
+    let timer;
+    document.getElementById('search').addEventListener('input', () => {
+      clearTimeout(timer); timer = setTimeout(loadProdutos, 300);
+    });
+    ['filtro-categoria','filtro-marca','filtro-status','filtro-destaque'].forEach(id =>
+      document.getElementById(id).addEventListener('change', loadProdutos)
+    );
+
+    // Init
+    await loadOptions();
+
+    // Aplica filtro da URL
+    const urlParams = new URLSearchParams(location.search);
+    if (urlParams.get('destaque') === '1') {
+      document.getElementById('filtro-destaque').value = 'true';
+    }
+
+    await loadProdutos();
+  </script>
+</body>
+</html>

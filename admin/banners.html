@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Banners — Quintal Admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/admin/css/admin.css">
+</head>
+<body>
+  <div class="app">
+    <main class="main">
+      <div class="page-header">
+        <div>
+          <div class="breadcrumb">Painel · Banners</div>
+          <h1>Banners do carrossel</h1>
+        </div>
+        <button class="btn btn--mostarda" id="btn-novo">+ Novo banner</button>
+      </div>
+
+      <div class="card" style="background:#fef3d4; padding:12px 16px;">
+        <strong>Dica:</strong> use imagens horizontais de pelo menos 2000×1000 px. Aparecem na home do site, em ordem crescente.
+      </div>
+
+      <div id="lista" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px,1fr)); gap:16px;"></div>
+    </main>
+  </div>
+
+  <div class="modal-bg" id="modal-bg">
+    <div class="modal">
+      <div class="modal__header">
+        <h2 id="modal-title">Novo banner</h2>
+        <button class="modal__close" data-close>×</button>
+      </div>
+      <form id="form-banner">
+        <input type="hidden" id="b-id">
+
+        <div class="form-group">
+          <label class="form-label">Imagem *</label>
+          <label class="uploader" for="b-foto-input">
+            <input type="file" id="b-foto-input" accept="image/*">
+            <img id="b-foto-preview" class="preview" style="display:none">
+            <div id="b-foto-text">Clique para enviar banner</div>
+          </label>
+          <input type="hidden" id="b-foto-url">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Título interno *</label>
+          <input class="form-control" id="b-titulo" required>
+          <div class="form-help">Só identifica internamente, não aparece no site.</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Texto alternativo (acessibilidade)</label>
+          <input class="form-control" id="b-alt">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Link (opcional)</label>
+            <input class="form-control" id="b-link" placeholder="https://...">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Ordem</label>
+            <input type="number" class="form-control" id="b-ordem" value="0">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label style="display:flex; gap:6px;"><input type="checkbox" id="b-ativo" checked> Ativo</label>
+        </div>
+
+        <div class="modal__actions">
+          <button type="button" class="btn" data-close>Cancelar</button>
+          <button type="submit" class="btn btn--primary" id="btn-salvar">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/admin/js/config.js"></script>
+  <script type="module">
+    import { supabase, requireAuth, uploadImage, toast } from '/admin/js/supabase-client.js';
+    import { renderSidebar } from '/admin/js/sidebar.js';
+
+    const auth = await requireAuth(['admin']);
+    if (!auth) throw new Error('sem auth');
+    renderSidebar(auth.perfil, 'banners');
+
+    async function load() {
+      const { data, error } = await supabase.from('banners_hero').select('*').order('ordem');
+      if (error) { toast(error.message,'error'); return; }
+      document.getElementById('lista').innerHTML = (data || []).map(b => `
+        <div class="card" style="padding:0; overflow:hidden;">
+          <img src="${b.foto_url}" style="width:100%; height:180px; object-fit:cover;">
+          <div style="padding:14px;">
+            <strong>${escapeHtml(b.titulo)}</strong>
+            <div style="font-size:12px; color:var(--muted); margin-top:4px;">
+              Ordem ${b.ordem} ${b.ativo ? '· <span class="tag tag--success">ativo</span>' : '· <span class="tag tag--danger">inativo</span>'}
+            </div>
+            <div style="display:flex; gap:6px; margin-top:12px;">
+              <button class="btn btn--sm" data-edit="${b.id}">Editar</button>
+              <button class="btn btn--sm btn--danger" data-del="${b.id}">Excluir</button>
+            </div>
+          </div>
+        </div>
+      `).join('') || '<div class="empty">Sem banners. Clique em + Novo banner.</div>';
+
+      document.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => abrir(b.dataset.edit));
+      document.querySelectorAll('[data-del]').forEach(b => b.onclick = () => excluir(b.dataset.del));
+    }
+
+    function escapeHtml(s) {
+      return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+    }
+
+    const modalBg = document.getElementById('modal-bg');
+    document.querySelectorAll('[data-close]').forEach(b => b.onclick = () => modalBg.classList.remove('is-open'));
+    modalBg.addEventListener('click', e => { if (e.target === modalBg) modalBg.classList.remove('is-open'); });
+    document.getElementById('btn-novo').onclick = () => abrir();
+
+    function abrir(id = null) {
+      document.getElementById('form-banner').reset();
+      document.getElementById('b-id').value = '';
+      document.getElementById('b-foto-url').value = '';
+      document.getElementById('b-foto-preview').style.display = 'none';
+      document.getElementById('b-foto-text').textContent = 'Clique para enviar banner';
+      document.getElementById('modal-title').textContent = 'Novo banner';
+      if (id) carregar(id);
+      modalBg.classList.add('is-open');
+    }
+    async function carregar(id) {
+      const { data, error } = await supabase.from('banners_hero').select('*').eq('id', id).single();
+      if (error) return toast(error.message,'error');
+      document.getElementById('modal-title').textContent = 'Editar banner';
+      document.getElementById('b-id').value = data.id;
+      document.getElementById('b-titulo').value = data.titulo;
+      document.getElementById('b-alt').value = data.alt || '';
+      document.getElementById('b-link').value = data.link || '';
+      document.getElementById('b-ordem').value = data.ordem;
+      document.getElementById('b-ativo').checked = data.ativo;
+      document.getElementById('b-foto-url').value = data.foto_url;
+      if (data.foto_url) {
+        const img = document.getElementById('b-foto-preview');
+        img.src = data.foto_url; img.style.display = 'block';
+      }
+    }
+
+    document.getElementById('b-foto-input').addEventListener('change', async (e) => {
+      const file = e.target.files[0]; if (!file) return;
+      const txt = document.getElementById('b-foto-text');
+      txt.textContent = 'Enviando…';
+      try {
+        const url = await uploadImage('banners', file);
+        document.getElementById('b-foto-url').value = url;
+        const img = document.getElementById('b-foto-preview');
+        img.src = url; img.style.display = 'block';
+        txt.textContent = 'Banner carregado. Clique para trocar.';
+      } catch (err) { toast(err.message,'error'); txt.textContent = 'Clique para enviar banner'; }
+    });
+
+    document.getElementById('form-banner').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = document.getElementById('b-id').value;
+      const payload = {
+        titulo: document.getElementById('b-titulo').value.trim(),
+        foto_url: document.getElementById('b-foto-url').value,
+        alt: document.getElementById('b-alt').value.trim() || null,
+        link: document.getElementById('b-link').value.trim() || null,
+        ordem: parseInt(document.getElementById('b-ordem').value || '0', 10),
+        ativo: document.getElementById('b-ativo').checked,
+      };
+      if (!payload.foto_url) { toast('Envie uma imagem','error'); return; }
+
+      const res = id
+        ? await supabase.from('banners_hero').update(payload).eq('id', id)
+        : await supabase.from('banners_hero').insert(payload);
+      if (res.error) return toast(res.error.message, 'error');
+      toast(id ? 'Banner atualizado' : 'Banner criado', 'success');
+      modalBg.classList.remove('is-open');
+      load();
+    });
+
+    async function excluir(id) {
+      if (!confirm('Excluir este banner?')) return;
+      const { error } = await supabase.from('banners_hero').delete().eq('id', id);
+      if (error) return toast(error.message, 'error');
+      toast('Excluído', 'success');
+      load();
+    }
+
+    await load();
+  </script>
+</body>
+</html>
