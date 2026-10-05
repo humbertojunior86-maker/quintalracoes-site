@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#111111">
+  <title>Quintal — Gestão da loja</title>
+  <link rel="icon" href="../assets/logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="gestao.css">
+  <script src="../admin/js/config.js"></script>
+</head>
+<body class="na-inicio">
+  <header class="topo">
+    <img class="topo__logo" src="../assets/logo.png" alt="Quintal Rações">
+    <button class="topo__voltar" id="voltar" type="button" aria-label="Voltar para o início">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5 8 12l7 7"/></svg>
+      Início
+    </button>
+    <div class="topo__titulo" id="titulo">Gestão da loja</div>
+    <button class="topo__tam" id="tam" type="button" aria-label="Mudar o tamanho da letra">A+</button>
+  </header>
+
+  <main class="tela" id="tela" tabindex="-1"><div class="carregando">Carregando…</div></main>
+
+  <div class="janela-fundo" id="janela-fundo" hidden><div class="janela" id="janela" role="dialog" aria-modal="true"></div></div>
+  <div id="comprovante"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
