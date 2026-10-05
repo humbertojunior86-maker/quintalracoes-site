@@ -1,7 +1,8 @@
 // Cria a preferência de pagamento (cartão/Pix) no Mercado Pago para um pedido do site.
 // Segredos necessários: MP_ACCESS_TOKEN, SITE_URL (ex.: https://quintalracoes.com.br)
 // Só é chamada quando config_loja.cartao_online_ativo = true.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { mpToken } from "./mp_core.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -40,9 +41,10 @@ Deno.serve(async (req) => {
       notification_url: fnUrl,
       statement_descriptor: "QUINTAL RACOES",
     };
+    const tk = await mpToken(db);
     const r = await fetch("https://api.mercadopago.com/checkout/preferences", {
       method: "POST",
-      headers: { Authorization: `Bearer ${Deno.env.get("MP_ACCESS_TOKEN")}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${tk}`, "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
     const pref = await r.json();

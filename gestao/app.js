@@ -45,6 +45,9 @@ const ICO = {
   mais: '<path d="M12 5v14M5 12h14"/>',
   lixo: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
   imp: '<path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M7 14h10v7H7z"/>',
+  link: '<path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/>',
+  mp: '<rect x="2" y="5" width="20" height="14" rx="3"/><path d="M2 10h20M6 15h4"/>',
+  copiar: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>',
   whats: '<path d="M4 20l1.3-3.8A8 8 0 1 1 8 19z"/><path d="M9 9.5c.3 2 2.3 4.2 4.6 4.8l1.2-1.2 1.7.8-.4 1.6c-3.5.4-7.6-3.6-7.2-7.2l1.6-.4.8 1.7z"/>',
 };
 const ico = (k) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICO[k]}</svg>`;
@@ -110,7 +113,7 @@ aplicaTam();
 const S = { perfil: null, admin: false, cfg: {}, produtos: null, venda: [], desconto: 0, clientes: null };
 const tela = $('#tela');
 const TELAS = {};
-const TITULOS = { inicio: 'Gestão da loja', vender: 'Vender', caixa: 'Caixa', estoque: 'Estoque', mercadoria: 'Chegou mercadoria', pagar: 'Contas para pagar', receber: 'Quem me deve', resumo: 'Como está a loja' };
+const TITULOS = { inicio: 'Gestão da loja', vender: 'Vender', caixa: 'Caixa', estoque: 'Estoque', mercadoria: 'Chegou mercadoria', pagar: 'Contas para pagar', receber: 'Quem me deve', resumo: 'Como está a loja', mp: 'Mercado Pago' };
 $('#voltar').addEventListener('click', () => { location.hash = '#inicio'; });
 
 async function ir() {
@@ -198,6 +201,7 @@ TELAS.inicio = async () => {
       ${S.admin ? bt('#pagar', 'conta', 'Contas para pagar', 'Boletos, aluguel, luz, fornecedor', '', +r.pagar_vencido > 0 ? 'Tem atrasada' : +r.pagar_hoje > 0 ? 'Vence hoje' : '') : ''}
       ${bt('#receber', 'mao', 'Quem me deve', 'Fiado e valores a receber', '', +r.fiado_aberto > 0 ? `Fiado: ${brl(r.fiado_aberto)}` : '')}
       ${bt('#resumo', 'grafico', 'Como está a loja', 'Vendas, gastos e quanto sobrou')}
+      ${S.admin ? bt('#mp', 'mp', 'Mercado Pago', S.mp?.configurado ? 'Pix, links de pagamento e conferência' : 'Ligar o Pix e o link de pagamento', '', S.mp?.configurado ? '' : 'Desligado') : ''}
       ${bt('../admin/pedidos.html', 'site', 'Pedidos do site', 'Pedidos e entregas da loja online')}
     </nav>
     <div class="linha-btns" style="margin-top:28px"><button class="btn" id="sair">Sair do sistema</button></div>`;
@@ -358,10 +362,11 @@ function escolherPagamento() {
   });
 }
 
-function pagarCom(forma) {
+function pagarCom(forma, manual = false) {
   const t = totais();
   const bruto = ['dinheiro', 'pix'].includes(forma) ? t.vista : t.prazo;
   const total = r2(Math.max(0, bruto - (S.desconto || 0)));
+  if (forma === 'pix' && !manual && S.mp?.configurado) return pixMP(total);
   const voltar = `<button class="btn btn--nao" id="pg-voltar">Voltar</button>`;
   let corpo = '';
   if (forma === 'dinheiro') {
@@ -998,9 +1003,15 @@ TELAS.receber = async () => {
       <div class="lista" style="margin:14px 0">${g.contas.map(c => `<div class="item ${c.vencimento < hoje ? 'item--vermelho' : ''}"><span class="item__txt"><span class="item__nome">${esc(c.descricao)}</span>
         <span class="item__sub">Vence ${dataBR(c.vencimento)}${+c.valor_recebido > 0 ? ' · já pagou ' + brl(c.valor_recebido) : ''}</span></span><span class="item__valor">${brl(resta(c))}</span></div>`).join('')}</div>
       <button class="btn btn--sim btn--cheio" id="r-pagou">${ico('ok')} O cliente pagou</button>
+      ${S.mp?.configurado ? `<button class="btn btn--cheio" style="margin-top:12px" id="r-link">${ico('link')} Mandar link para pagar (Pix ou cartão)</button>` : ''}
       ${tel ? `<a class="btn btn--cheio" style="margin-top:12px" target="_blank" rel="noopener" href="https://wa.me/55${tel}?text=${encodeURIComponent(msg)}">${ico('whats')} Lembrar pelo WhatsApp</a>` : ''}
       <div class="linha-btns"><button class="btn btn--nao" data-fechar>Fechar</button></div>`);
     $('#r-pagou', j).addEventListener('click', () => receberValor(g.contas, tot));
+    $('#r-link', j)?.addEventListener('click', (e) => acao(e.currentTarget, async () => {
+      const c = await mp('link', { origem: 'fiado', valor: r2(tot), cliente_id: g.contas[0].cliente_id, conta_receber_ids: g.contas.map(x => x.id),
+        descricao: `Quintal Rações — ${g.cli?.nome || 'cliente'}` });
+      linkPronto(c, g.cli, `Olá, ${(g.cli?.nome || '').split(' ')[0]}! Aqui é do Quintal Rações. Segue o link para pagar ${brl(tot)} por Pix ou cartão: ${c.link}  Obrigado!`);
+    }));
   }));
   $$('[data-caiu]').forEach(b => b.addEventListener('click', (e) => acao(e.currentTarget, async () => {
     const c = outros.find(x => x.id == b.dataset.caiu);
@@ -1085,6 +1096,205 @@ TELAS.resumo = async () => {
   await desenha();
 };
 
+
+// ============================================================
+// MERCADO PAGO (Pix com confirmação automática, link e conferência)
+// ============================================================
+async function mp(acaoMp, dados = {}) {
+  const { data, error } = await supabase.functions.invoke('mp', { body: { acao: acaoMp, ...dados } });
+  if (error) {
+    let m = error.message;
+    try { const b = await error.context.json(); m = b.error || m; } catch { /* sem corpo */ }
+    throw new Error(m);
+  }
+  if (data?.error) throw new Error(data.error);
+  return data;
+}
+async function carregaMP() { try { S.mp = await mp('status'); } catch { S.mp = { configurado: false }; } }
+
+const copiar = async (txt, btn) => {
+  try { await navigator.clipboard.writeText(txt); }
+  catch { const t = document.createElement('textarea'); t.value = txt; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
+  recado('Copiado'); if (btn) { const h = btn.innerHTML; btn.textContent = 'Copiado'; setTimeout(() => { btn.innerHTML = h; }, 1800); }
+};
+
+function pixMP(total) {
+  const j = abrirJanela(`
+    <h2>Pix</h2>
+    <p class="ajuda">Valor da venda</p><div class="grande-valor">${brl(total)}</div>
+    <div class="qr" id="mp-qr">Gerando o código…</div>
+    <div class="espera" id="mp-st" role="status" aria-live="polite"><span class="pulso" aria-hidden="true"></span> Esperando o cliente pagar…</div>
+    <button class="btn btn--cheio" id="mp-copiar" hidden>${ico('copiar')} Copiar código (Pix copia e cola)</button>
+    <p class="ajuda">Quando o Pix cair, a venda é confirmada sozinha.</p>
+    <div class="linha-btns"><button class="btn btn--nao" id="mp-voltar">Voltar</button><button class="btn" id="mp-ja">O cliente já pagou</button></div>`);
+  let cob = null, parado = false, fechando = false;
+  const vivo = () => !parado && document.body.contains($('#mp-st', j) || document.createElement('i')) && $('#mp-st');
+  const confirma = async () => {
+    if (fechando) return; fechando = true; parado = true;
+    $('#mp-st', j).className = 'espera espera--ok'; $('#mp-st', j).innerHTML = `${ico('ok')} Pix recebido. Registrando a venda…`;
+    try {
+      const r = await rpc('registrar_venda', { payload: {
+        itens: S.venda.map(i => ({ produto_id: i.p.id, quantidade: i.qtd })),
+        pagamentos: [{ forma: 'pix', valor: total, cobranca_mp_id: cob.id }], desconto: S.desconto || 0 } });
+      vendaFeita(r, 'pix', null);
+    } catch (e) { fechando = false; recado(msgErro(e), 'erro'); $('#mp-st', j).textContent = 'O Pix caiu, mas a venda não foi registrada. Toque em "O cliente já pagou".'; }
+  };
+  const consulta = async () => {
+    if (!cob || fechando) return;
+    try {
+      const c = await mp('consultar', { id: cob.id });
+      if (c.status === 'aprovado') return confirma();
+      if (['cancelado', 'expirado', 'recusado'].includes(c.status)) {
+        parado = true; $('#mp-st', j).className = 'espera espera--erro';
+        $('#mp-st', j).textContent = 'Esse Pix venceu ou foi cancelado. Volte e gere outro.';
+      }
+    } catch { /* sem internet: tenta de novo */ }
+  };
+  const laco = async () => { while (vivo()) { await new Promise(r => setTimeout(r, 4000)); if (vivo()) await consulta(); } };
+  (async () => {
+    try {
+      cob = await mp('pix', { origem: 'balcao', valor: total, descricao: 'Compra na Quintal Rações' });
+      $('#mp-qr', j).innerHTML = cob.qr_base64 ? `<img alt="Código Pix de ${brl(total)}" src="data:image/png;base64,${cob.qr_base64}">` : 'Código gerado. Use o botão copiar.';
+      if (cob.qr_code) { const b = $('#mp-copiar', j); b.hidden = false; b.addEventListener('click', () => copiar(cob.qr_code, b)); }
+      laco();
+    } catch (e) {
+      parado = true;
+      $('#mp-qr', j).innerHTML = `<div class="aviso aviso--vermelho" style="margin:0">Não foi possível gerar o Pix: ${esc(msgErro(e))}</div>`;
+      $('#mp-st', j).outerHTML = `<button class="btn btn--cheio" id="mp-chave">Usar o Pix da chave da loja</button>`;
+      $('#mp-chave', j).addEventListener('click', () => pagarCom('pix', true));
+    }
+  })();
+  $('#mp-voltar', j).addEventListener('click', () => { parado = true; if (cob) mp('cancelar', { id: cob.id }).catch(() => {}); escolherPagamento(); });
+  $('#mp-ja', j).addEventListener('click', (e) => acao(e.currentTarget, async () => {
+    if (!cob) throw new Error('O código ainda está sendo gerado');
+    const c = await mp('consultar', { id: cob.id });
+    if (c.status === 'aprovado') return confirma();
+    e.currentTarget.disabled = false; e.currentTarget.innerHTML = 'O cliente já pagou';
+    recado('O Mercado Pago ainda não confirmou. Espere alguns segundos.', 'erro');
+  }));
+}
+
+function linkPronto(c, cli, msg) {
+  const tel = (cli?.telefone || '').replace(/\D/g, '');
+  const j = abrirJanela(`
+    <div class="feito">${ico('okc')}<h1>Link pronto</h1>
+      <p style="font-size:1.15rem">Valor: <strong>${brl(c.valor)}</strong>. O cliente paga por Pix ou cartão.</p>
+      <p class="link-mp">${esc(c.link)}</p>
+      <p class="ajuda">Quando o cliente pagar, a conta baixa sozinha.</p></div>
+    ${tel ? `<a class="btn btn--sim btn--cheio" target="_blank" rel="noopener" href="https://wa.me/55${tel}?text=${encodeURIComponent(msg)}">${ico('whats')} Mandar pelo WhatsApp</a>` : ''}
+    <button class="btn btn--cheio" style="margin-top:12px" id="lk-copiar">${ico('copiar')} Copiar mensagem com o link</button>
+    <div class="linha-btns"><button class="btn btn--nao" data-fechar>Fechar</button></div>`);
+  $('#lk-copiar', j).addEventListener('click', (e) => copiar(msg, e.currentTarget));
+}
+
+const ST_MP = { pendente: ['Esperando', 'amarelo'], aprovado: ['Pago', 'verde'], cancelado: ['Cancelado', ''], expirado: ['Venceu', ''], recusado: ['Recusado', 'vermelho'], estornado: ['Devolvido', 'vermelho'] };
+
+TELAS.mp = async () => {
+  if (!S.admin) { tela.innerHTML = '<div class="aviso aviso--amarelo">Só o dono mexe aqui.</div>'; return; }
+  await carregaMP();
+  if (!S.mp.configurado) return mpLigar();
+  const hoje = hojeISO(), d = new Date();
+  const per = MP_PER || 'hoje';
+  const ini = per === 'hoje' ? hoje : per === 'semana' ? somaDias(hoje, -((d.getDay() + 6) % 7)) : per === 'mes' ? hoje.slice(0, 8) + '01'
+    : hojeISO(new Date(d.getFullYear(), d.getMonth() - 1, 1));
+  const fim = per === 'passado' ? hojeISO(new Date(d.getFullYear(), d.getMonth(), 0)) : hoje;
+  const r = await rpc('mp_conciliacao', { p_ini: ini, p_fim: fim });
+  const t = r.totais || {};
+  tela.innerHTML = `
+    <div class="aviso aviso--verde">Mercado Pago ligado${S.mp.final ? ` (token final ${esc(S.mp.final)})` : ''}${S.mp.teste ? ' · MODO TESTE' : ''}.
+      <button class="btn" id="mp-testar">Testar</button></div>
+    <button class="btn btn--sim btn--cheio" id="mp-cobrar">${ico('link')} Cobrar alguém por link</button>
+    <h2>Conferência</h2>
+    <div class="chips">${[['hoje', 'Hoje'], ['semana', 'Esta semana'], ['mes', 'Este mês'], ['passado', 'Mês passado']].map(([k, n]) => `<button class="chip ${per === k ? 'marcado' : ''}" data-per="${k}">${n}</button>`).join('')}</div>
+    <div class="placar__box placar__box--verde" style="margin-bottom:14px"><span>Recebido pelo Mercado Pago</span><strong>${brl(t.aprovado)}</strong>
+      <small>Taxas: ${brl(t.taxa)} · Fica para a loja: <b>${brl(t.liquido)}</b></small></div>
+    ${+t.a_liberar > 0 ? `<div class="aviso aviso--azul">${brl(t.a_liberar)} ainda vão ser liberados na conta do Mercado Pago.</div>` : ''}
+    ${+t.sem_venda > 0 ? `<div class="aviso aviso--vermelho">${t.sem_venda} Pix pago no balcão sem venda registrada. Confira abaixo.</div>` : ''}
+    ${+t.pendente > 0 ? `<div class="aviso aviso--amarelo">Esperando pagamento: ${brl(t.pendente)}</div>` : ''}
+    <button class="btn btn--cheio" id="mp-conf">Conferir com o extrato do Mercado Pago</button>
+    <h2>Cobranças</h2>
+    <div class="lista">${(r.lista || []).map(c => { const [nm, cor] = ST_MP[c.status] || [c.status, '']; return `
+      <div class="item ${cor === 'vermelho' || (c.status === 'aprovado' && c.origem === 'balcao' && !c.venda_id) ? 'item--vermelho' : ''}">
+        <span class="item__txt"><span class="item__nome">${c.tipo === 'pix' ? 'Pix' : 'Link'} · ${esc(c.cliente || (c.venda_numero ? 'Venda nº ' + c.venda_numero : c.descricao))}</span>
+          <span class="item__sub">${new Date(c.criado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}${+c.taxa_mp > 0 ? ' · taxa ' + brl(c.taxa_mp) : ''}${c.liberacao_em && c.status === 'aprovado' ? ' · libera ' + dataBR(c.liberacao_em) : ''}</span></span>
+        <span class="item__valor">${brl(c.valor_pago || c.valor)}<span class="tag-q tag-q--${({ verde: 'verde', amarelo: 'amar', vermelho: 'verm' })[cor] || 'cinza'}">${nm}</span></span>
+      </div>`; }).join('') || '<div class="vazio">Nenhuma cobrança nesse período.</div>'}</div>
+    <div class="linha-btns" style="margin-top:24px"><button class="btn" id="mp-trocar">Trocar o token</button></div>`;
+  $$('[data-per]').forEach(b => b.addEventListener('click', () => { MP_PER = b.dataset.per; TELAS.mp(); }));
+  $('#mp-testar').addEventListener('click', (e) => acao(e.currentTarget, async () => {
+    const x = await mp('testar'); recado(`Conectado na conta ${x.conta || x.email}`); e.currentTarget.disabled = false; e.currentTarget.textContent = 'Testar';
+  }));
+  $('#mp-trocar').addEventListener('click', () => mpLigar(true));
+  $('#mp-cobrar').addEventListener('click', cobrarAvulso);
+  $('#mp-conf').addEventListener('click', (e) => acao(e.currentTarget, async () => {
+    const x = await mp('conciliar', { ini, fim });
+    const fora = x.fora_do_sistema || [];
+    abrirJanela(`
+      <h2>Extrato do Mercado Pago</h2>
+      <table class="contas"><tr><td>Pagamentos aprovados</td><td>${x.mp.qtd}</td></tr>
+        <tr><td>Total no Mercado Pago</td><td>${brl(x.mp.bruto)}</td></tr><tr><td>Taxas</td><td>− ${brl(x.mp.taxa)}</td></tr>
+        <tr><td>Total no sistema</td><td>${brl(t.aprovado)}</td></tr></table>
+      ${x.atualizadas ? `<div class="aviso aviso--verde">${x.atualizadas} cobrança(s) atualizada(s) agora.</div>` : ''}
+      ${fora.length ? `<h2>Caiu no Mercado Pago e não está no sistema</h2>
+        <p class="ajuda">Podem ser Pix feitos direto na chave ou pagamentos na maquininha. Se foi venda, registre no balcão.</p>
+        <div class="lista">${fora.map(f => `<div class="item item--amarelo"><span class="item__txt"><span class="item__nome">${esc(f.descricao || 'Pagamento')} · ${esc(f.meio || '')}</span>
+          <span class="item__sub">${f.data ? new Date(f.data).toLocaleString('pt-BR') : ''} · nº ${esc(f.id)}</span></span><span class="item__valor">${brl(f.valor)}</span></div>`).join('')}</div>`
+        : '<div class="aviso aviso--verde">Tudo que caiu no Mercado Pago está no sistema.</div>'}
+      <div class="linha-btns"><button class="btn btn--nao" data-fechar>Fechar</button></div>`);
+    TELAS_RECARREGA_MP = true;
+  }));
+};
+let MP_PER = 'hoje', TELAS_RECARREGA_MP = false;
+
+function mpLigar(trocar = false) {
+  const html = `
+    ${trocar ? '' : '<div class="aviso aviso--amarelo">O Mercado Pago ainda não está ligado.</div>'}
+    <h2>Como ligar (uma vez só)</h2>
+    <ol class="passos">
+      <li>Entre em <b>mercadopago.com.br/developers</b> com a conta da loja.</li>
+      <li>Toque em <b>Suas integrações</b> e depois em <b>Criar aplicação</b>. Pode dar o nome "Quintal Gestão".</li>
+      <li>Abra a aplicação e entre em <b>Credenciais de produção</b>.</li>
+      <li>Copie o <b>Access Token</b> (começa com <b>APP_USR-</b>) e cole aqui embaixo.</li>
+    </ol>
+    <label class="campo"><span>Access Token do Mercado Pago</span>
+      <input id="mp-tk" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="APP_USR-…"></label>
+    <p class="ajuda">O token fica guardado no servidor da loja e não aparece mais na tela.</p>
+    <div class="linha-btns">${trocar ? '<button class="btn btn--nao" id="mp-cancela">Voltar</button>' : ''}<button class="btn btn--sim" id="mp-ligar">${ico('ok')} Ligar Mercado Pago</button></div>
+    ${trocar ? '<button class="btn btn--perigo btn--cheio" style="margin-top:20px" id="mp-desligar">Desligar o Mercado Pago</button>' : ''}`;
+  if (trocar) abrirJanela(html); else tela.innerHTML = html;
+  const raiz = trocar ? jan : tela;
+  $('#mp-cancela', raiz)?.addEventListener('click', fecharJanela);
+  $('#mp-ligar', raiz).addEventListener('click', (e) => acao(e.currentTarget, async () => {
+    const v = $('#mp-tk', raiz).value.trim();
+    if (!v) throw new Error('Cole o Access Token');
+    await rpc('mp_salvar_token', { p_token: v });
+    $('#mp-tk', raiz).value = '';
+    try { const x = await mp('testar'); recado(`Ligado na conta ${x.conta || x.email}`); }
+    catch (err) { recado('Token guardado, mas o teste falhou: ' + msgErro(err), 'erro'); }
+    TELAS.mp();
+  }));
+  $('#mp-desligar', raiz)?.addEventListener('click', (e) => acao(e.currentTarget, async () => {
+    if (!confirm('Desligar o Mercado Pago? O Pix volta a ser pela chave da loja.')) { e.currentTarget.disabled = false; e.currentTarget.textContent = 'Desligar o Mercado Pago'; return; }
+    await rpc('mp_salvar_token', { p_token: '' }); recado('Mercado Pago desligado'); TELAS.mp();
+  }));
+}
+
+function cobrarAvulso() {
+  const j = abrirJanela(`
+    <h2>Cobrar por link</h2>
+    <p class="ajuda">O cliente recebe um link e paga por Pix ou cartão.</p>
+    ${campoDinheiro('ca-val', 'Valor (R$)', '', 'autofocus')}
+    <label class="campo"><span>O que é?</span><input id="ca-desc" placeholder="Ex.: Ração entregue para Dona Maria" autocomplete="off"></label>
+    <label class="campo"><span>WhatsApp do cliente (opcional)</span><input id="ca-tel" inputmode="tel" autocomplete="off"></label>
+    <div class="linha-btns"><button class="btn btn--nao" data-fechar>Voltar</button><button class="btn btn--sim" id="ca-ok">Criar link</button></div>`);
+  $('#ca-ok', j).addEventListener('click', (e) => acao(e.currentTarget, async () => {
+    const v = r2(num($('#ca-val', j).value)); if (!(v > 0)) throw new Error('Digite o valor');
+    const desc = $('#ca-desc', j).value.trim() || 'Compra na Quintal Rações';
+    const c = await mp('link', { origem: 'avulsa', valor: v, descricao: desc });
+    linkPronto(c, { telefone: $('#ca-tel', j).value }, `Olá! Aqui é do Quintal Rações. Segue o link para pagar ${brl(v)} (${desc}) por Pix ou cartão: ${c.link}  Obrigado!`);
+  }));
+}
+
 // toda tela nova fecha a janela aberta
 for (const k of Object.keys(TELAS)) { const f = TELAS[k]; TELAS[k] = async () => { fecharJanela(); return f(); }; }
 
@@ -1100,6 +1310,7 @@ for (const k of Object.keys(TELAS)) { const f = TELAS[k]; TELAS[k] = async () =>
     S.perfil = perfil; S.admin = perfil.role === 'admin';
     const { data: cfg } = await supabase.from('config_loja').select('*').eq('id', 1).single();
     S.cfg = cfg || {};
+    await carregaMP();
     ir();
   } catch (e) { tela.innerHTML = `<div class="aviso aviso--vermelho">${esc(msgErro(e))}</div><button class="btn btn--cheio" onclick="location.reload()">Tentar de novo</button>`; }
 })();
