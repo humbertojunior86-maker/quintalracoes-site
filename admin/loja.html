@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Loja online — Quintal Admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/admin/css/admin.css">
+  <link rel="stylesheet" href="/admin/css/loja-admin.css">
+</head>
+<body>
+<div class="app">
+  <main class="main">
+    <div class="page-header">
+      <div><div class="breadcrumb">Loja online</div><h1>Configurações da loja</h1></div>
+      <a href="/loja/" target="_blank" class="btn">↗ Abrir loja</a>
+    </div>
+    <div id="checklist" class="card"></div>
+    <form id="f" class="card" style="max-width:760px">
+      <label class="switch" style="margin-bottom:14px"><input type="checkbox" name="loja_aberta"> Loja aberta ao público (desmarcado = homologação, mostra aviso de teste)</label>
+      <h3 style="font-family:'Plus Jakarta Sans';margin:10px 0">Pix</h3>
+      <div class="form-row form-row--3">
+        <div class="form-group"><label class="form-label">Chave Pix</label><input class="form-control" name="pix_chave" placeholder="CNPJ, e-mail, celular ou aleatória"></div>
+        <div class="form-group"><label class="form-label">Nome do recebedor</label><input class="form-control" name="pix_nome" maxlength="25"></div>
+        <div class="form-group"><label class="form-label">Cidade</label><input class="form-control" name="pix_cidade" maxlength="15"></div>
+      </div>
+      <p class="form-help">Com a chave preenchida, o cliente vê QR Code e “copia e cola” com o valor exato do pedido. A confirmação do recebimento é feita na tela de Pedidos.</p>
+      <h3 style="font-family:'Plus Jakarta Sans';margin:18px 0 10px">Regras do pedido</h3>
+      <div class="form-row form-row--3">
+        <div class="form-group"><label class="form-label">Pedido mínimo (R$)</label><input class="form-control" name="pedido_minimo" inputmode="decimal"></div>
+        <div class="form-group"><label class="form-label">Frete grátis acima de (R$)</label><input class="form-control" name="frete_gratis_acima" inputmode="decimal" placeholder="vazio = nunca"></div>
+        <div class="form-group"><label class="form-label">WhatsApp da loja</label><input class="form-control" name="whatsapp"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Aviso no topo da loja</label><input class="form-control" name="aviso_topo"></div>
+      <label class="switch"><input type="checkbox" name="retirada_ativa"> Permitir retirada na loja</label>
+      <label class="switch" style="margin-top:10px"><input type="checkbox" name="cartao_online_ativo"> Cartão de crédito online (Mercado Pago)</label>
+      <p class="form-help">Ative somente depois de cadastrar o Access Token do Mercado Pago no Supabase (segredo <code>MP_ACCESS_TOKEN</code>). Sem ele, o cliente continua pagando cartão na entrega.</p>
+      <div class="modal__actions"><button class="btn btn--primary">Salvar configurações</button></div>
+    </form>
+  </main>
+</div>
+<script src="/admin/js/config.js"></script>
+<script type="module">
+import { supabase, requireAuth, toast } from '/admin/js/supabase-client.js';
+import { renderSidebar } from '/admin/js/sidebar.js';
+const auth = await requireAuth(['admin']); if (!auth) throw new Error('sem auth');
+renderSidebar(auth.perfil, 'loja');
+const f = document.getElementById('f');
+async function carregar() {
+  const [{ data: c }, rev, sem, parc, zon] = await Promise.all([
+    supabase.from('config_loja').select('*').eq('id', 1).single(),
+    supabase.from('produtos').select('id', { count: 'exact', head: true }).eq('vende_online', true).eq('preco_revisar', true),
+    supabase.from('produtos').select('id', { count: 'exact', head: true }).eq('vende_online', true).is('preco_normal', null),
+    supabase.from('parceiros_entrega').select('telefone').eq('ativo', true),
+    supabase.from('zonas_entrega').select('id', { count: 'exact', head: true }).eq('ativo', true),
+  ]);
+  for (const [k, v] of Object.entries(c)) { const el = f.elements[k]; if (!el) continue; if (el.type === 'checkbox') el.checked = !!v; else el.value = v ?? ''; }
+  const semTel = (parc.data || []).filter(p => !p.telefone).length;
+  const itens = [
+    [!!c.pix_chave, 'Chave Pix cadastrada'],
+    [!rev.count, `Preços revisados${rev.count ? ` — ${rev.count} produto(s) marcados “preço a revisar”` : ''}`],
+    [!sem.count, `Todos os produtos online com preço${sem.count ? ` — ${sem.count} sem preço` : ''}`],
+    [!semTel, `Entregadores com WhatsApp${semTel ? ` — ${semTel} sem telefone` : ''}`],
+    [zon.count > 0, 'Bairros e taxas configurados'],
+  ];
+  document.getElementById('checklist').innerHTML = `<h3 style="margin-top:0;font-family:'Plus Jakarta Sans'">Checklist para abrir a loja</h3>
+    ${itens.map(([ok, t]) => `<div class="det-linha"><span>${t}</span><span class="tag ${ok ? 'tag--success' : 'tag--danger'}">${ok ? 'ok' : 'pendente'}</span></div>`).join('')}
+    <p class="form-help"><a href="/admin/produtos.html">Revisar produtos</a> · <a href="/admin/entregas.html">Entregadores e bairros</a></p>`;
+}
+f.onsubmit = async (e) => {
+  e.preventDefault();
+  const n = (v) => v === '' ? null : +String(v).replace(',', '.');
+  const row = {
+    loja_aberta: f.loja_aberta.checked, pix_chave: f.pix_chave.value.trim() || null, pix_nome: f.pix_nome.value.trim() || null, pix_cidade: f.pix_cidade.value.trim() || null,
+    pedido_minimo: n(f.pedido_minimo.value) ?? 0, frete_gratis_acima: n(f.frete_gratis_acima.value), whatsapp: f.whatsapp.value.replace(/\D/g, ''),
+    aviso_topo: f.aviso_topo.value || null, retirada_ativa: f.retirada_ativa.checked, cartao_online_ativo: f.cartao_online_ativo.checked, updated_at: new Date().toISOString(),
+  };
+  const { error } = await supabase.from('config_loja').update(row).eq('id', 1);
+  if (error) return toast(error.message, 'error');
+  toast('Configurações salvas'); carregar();
+};
+carregar();
+</script>
+</body>
+</html>

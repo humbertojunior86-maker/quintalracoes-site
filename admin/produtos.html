@@ -152,6 +152,20 @@
           </label>
         </div>
 
+        <fieldset style="border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin:0 0 14px;">
+          <legend style="font-weight:700; padding:0 6px;">Loja online e marketplaces</legend>
+          <div class="form-row form-row--3">
+            <div class="form-group"><label class="form-label">SKU</label><input class="form-control" id="produto-sku" placeholder="QR-XXX-15"></div>
+            <div class="form-group"><label class="form-label">Código de barras (EAN)</label><input class="form-control" id="produto-gtin" inputmode="numeric"></div>
+            <div class="form-group"><label class="form-label">Peso (kg)</label><input type="number" step="0.001" min="0" class="form-control" id="produto-peso"></div>
+          </div>
+          <div class="form-group" style="display:flex; gap:18px; flex-wrap:wrap; margin-bottom:0;">
+            <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" id="produto-vende-online"> Vender na loja online</label>
+            <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" id="produto-controla-estoque"> Bloquear venda sem estoque</label>
+            <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" id="produto-preco-revisar"> Preço a revisar</label>
+          </div>
+        </fieldset>
+
         <div class="modal__actions">
           <button type="button" class="btn" data-close>Cancelar</button>
           <button type="submit" class="btn btn--primary" id="btn-salvar">Salvar</button>
@@ -289,6 +303,12 @@
       document.getElementById('produto-ordem').value = data.ordem ?? 0;
       document.getElementById('produto-ativo').checked = !!data.ativo;
       document.getElementById('produto-destaque').checked = !!data.destaque;
+      document.getElementById('produto-sku').value = data.sku || '';
+      document.getElementById('produto-gtin').value = data.gtin || '';
+      document.getElementById('produto-peso').value = data.peso_kg ?? '';
+      document.getElementById('produto-vende-online').checked = !!data.vende_online;
+      document.getElementById('produto-controla-estoque').checked = !!data.controla_estoque;
+      document.getElementById('produto-preco-revisar').checked = !!data.preco_revisar;
       document.getElementById('produto-foto-url').value = data.foto_url || '';
       if (data.foto_url) {
         const img = document.getElementById('produto-foto-preview');
@@ -345,6 +365,12 @@
         ordem: parseInt(document.getElementById('produto-ordem').value || '0', 10),
         ativo: document.getElementById('produto-ativo').checked,
         destaque: document.getElementById('produto-destaque').checked,
+        sku: document.getElementById('produto-sku').value.trim() || null,
+        gtin: document.getElementById('produto-gtin').value.trim() || null,
+        peso_kg: parseNum('produto-peso'),
+        vende_online: document.getElementById('produto-vende-online').checked,
+        controla_estoque: document.getElementById('produto-controla-estoque').checked,
+        preco_revisar: document.getElementById('produto-preco-revisar').checked,
       };
 
       let res;

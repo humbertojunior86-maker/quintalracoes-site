@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Entregas — Quintal Admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/admin/css/admin.css">
+  <link rel="stylesheet" href="/admin/css/loja-admin.css">
+</head>
+<body>
+<div class="app">
+  <main class="main">
+    <div class="page-header">
+      <div><div class="breadcrumb">Loja online</div><h1>Entregas</h1></div>
+    </div>
+    <div class="tabs" id="tabs">
+      <button data-aba="despacho" class="is-on">Despacho</button>
+      <button data-aba="acerto">Acerto com entregadores</button>
+      <button data-aba="parceiros">Parceiros</button>
+      <button data-aba="zonas">Bairros e taxas</button>
+    </div>
+    <div id="vista"><div class="loading">Carregando…</div></div>
+  </main>
+</div>
+
+<div class="modal-bg" id="m-form"><div class="modal" id="form-box"></div></div>
+
+<script src="/admin/js/config.js"></script>
+<script type="module">
+import { supabase, requireAuth, toast } from '/admin/js/supabase-client.js';
+import { renderSidebar } from '/admin/js/sidebar.js';
+import { PAGTO, PAG_ST, esc, brl, wa, tempo, statusTag, rankParceiros, linkEntregador } from '/admin/js/loja-admin.js';
+
+const auth = await requireAuth(); if (!auth) throw new Error('sem auth');
+renderSidebar(auth.perfil, 'entregas');
+const isAdmin = auth.perfil.role === 'admin';
+const $ = (s) => document.querySelector(s);
+const S = { aba: 'despacho', zonas: [], parceiros: [], tabela: [], peds: [] };
+
+async function carregar() {
+  const [z, p, t, ped] = await Promise.all([
+    supabase.from('zonas_entrega').select('*').order('ordem'),
+    supabase.from('parceiros_entrega').select('*').order('id'),
+    supabase.from('parceiro_zona').select('*'),
+    supabase.from('pedidos').select('*, pedido_itens(nome,quantidade,produtos(peso_kg))')
+      .eq('modalidade', 'entrega').gte('created_at', new Date(Date.now() - 31 * 864e5).toISOString()).order('created_at'),
+  ]);
+  S.zonas = z.data || []; S.parceiros = p.data || []; S.tabela = t.data || []; S.peds = ped.data || [];
+  render();
+}
+const peso = (p) => (p.pedido_itens || []).reduce((s, i) => s + (+i.produtos?.peso_kg || 0) * +i.quantidade, 0);
+const zona = (id) => S.zonas.find(z => z.id === id);
+const parc = (id) => S.parceiros.find(p => p.id === id);
+const render = () => ({ despacho, acerto, parceiros, zonas })[S.aba]();
+
+// ---------------- DESPACHO: agrupa por zona e sugere o parceiro mais barato ----------------
+function despacho() {
+  const aguardando = S.peds.filter(p => ['confirmado', 'separando', 'pronto'].includes(p.status) && !p.parceiro_id);
+  const atribuidos = S.peds.filter(p => ['confirmado', 'separando', 'pronto', 'em_rota'].includes(p.status) && p.parceiro_id);
+  const porZona = {};
+  aguardando.forEach(p => { (porZona[p.zona_id] ||= []).push(p); });
+  const lotes = Object.entries(porZona).map(([zid, ps]) => {
+    const kg = ps.reduce((s, p) => s + peso(p), 0);
+    const rank = rankParceiros(S.parceiros, S.tabela, +zid, ps.length, kg);
+    const avulso = ps.reduce((s, p) => s + (rankParceiros(S.parceiros, S.tabela, +zid, 1, peso(p))[0]?.custo || 0), 0);
+    return { zid: +zid, ps, kg, rank, avulso, frete: ps.reduce((s, p) => s + +p.frete, 0) };
+  });
+  $('#vista').innerHTML = `
+    <div class="callout">Pedidos do mesmo bairro saem juntos: o sistema soma o custo da corrida + adicional por parada e compara com mandar cada um separado. Escolha o parceiro, marque os pedidos e despache. O entregador recebe um link com a rota e confirma a entrega pelo celular.</div>
+    ${lotes.length ? lotes.map(l => {
+      const best = l.rank.find(r => r.cabe) || l.rank[0];
+      return `<div class="lote" data-zona="${l.zid}">
+        <div class="lote__head"><h3>${esc(zona(l.zid)?.nome || 'Sem zona')} · ${l.ps.length} pedido(s) · ${l.kg.toFixed(1).replace('.', ',')} kg</h3>
+          ${best && l.ps.length > 1 ? `<span class="econ">Juntos: ${brl(best.custo)} · separados: ${brl(l.avulso)} · economia ${brl(l.avulso - best.custo)}</span>` : ''}</div>
+        <div class="lote__peds">${l.ps.map(p => `<label><input type="checkbox" value="${p.id}" checked> #${p.numero} · ${esc(p.cliente_nome.split(' ')[0])} · ${statusTag(p.status)} · ${tempo(p.created_at)}</label>`).join('')}</div>
+        <div class="toolbar" style="margin:0">
+          <select class="sel-parc">${l.rank.map(r => `<option value="${r.id}" data-custo="${r.custo}" ${r.cabe ? '' : 'disabled'}>${esc(r.nome)} — ${brl(r.custo)} · ${r.prazo} min${r.cabe ? '' : ' (excede capacidade)'}</option>`).join('')}</select>
+          <span class="form-help">Frete cobrado dos clientes: ${brl(l.frete)}</span>
+          <span class="spacer"></span>
+          <button class="btn btn--primary" data-despachar="${l.zid}">Atribuir e avisar entregador</button>
+        </div>
+      </div>`;
+    }).join('') : '<div class="empty"><h3>Nada aguardando entregador</h3><p>Pedidos confirmados de entrega aparecem aqui agrupados por bairro.</p></div>'}
+    <h3 style="font-family:'Plus Jakarta Sans';margin:24px 0 10px">Com entregador</h3>
+    ${atribuidos.length ? `<div class="table-wrap"><table class="table"><thead><tr><th>Nº</th><th>Entregador</th><th>Bairro</th><th>Status</th><th>Cobrar</th><th class="num">Custo</th><th></th></tr></thead><tbody>
+      ${atribuidos.map(p => `<tr><td><a href="/admin/pedidos.html?id=${p.id}">#${p.numero}</a></td><td>${esc(parc(p.parceiro_id)?.nome)}</td><td>${esc(p.bairro || '')}</td><td>${statusTag(p.status)}</td>
+        <td>${p.pagamento_status === 'pendente' && ['pix_entrega', 'cartao_entrega', 'dinheiro'].includes(p.pagamento_forma) ? `${brl(p.total)} · ${PAGTO[p.pagamento_forma]}` : 'Pago'}</td>
+        <td class="num">${brl(p.custo_entrega)}</td><td><button class="btn btn--sm" data-desfazer="${p.id}" ${p.status === 'em_rota' ? 'disabled' : ''}>Remover</button></td></tr>`).join('')}
+    </tbody></table></div>` : '<p class="form-help">Nenhum pedido em rota.</p>'}`;
+}
+async function despachar(zid) {
+  const box = document.querySelector(`.lote[data-zona="${zid}"]`);
+  const ids = [...box.querySelectorAll('.lote__peds input:checked')].map(i => +i.value);
+  if (!ids.length) return toast('Marque ao menos um pedido', 'error');
+  const parcId = +box.querySelector('.sel-parc').value;
+  const p = parc(parcId);
+  const rank = rankParceiros(S.parceiros, S.tabela, zid, ids.length, 0).find(r => r.id === parcId);
+  const custoTotal = rank.custo, rateio = Math.round(custoTotal / ids.length * 100) / 100;
+  const grupo = crypto.randomUUID();
+  for (const id of ids) {
+    const { error } = await supabase.from('pedidos').update({ parceiro_id: parcId, custo_entrega: rateio, rota_grupo: ids.length > 1 ? grupo : null }).eq('id', id);
+    if (error) return toast(error.message, 'error');
+  }
+  const peds = S.peds.filter(x => ids.includes(x.id));
+  const msg = `Quintal Rações — ${ids.length} entrega(s) ${zona(zid)?.nome}\n` + peds.map(x => `#${x.numero} ${x.endereco || ''}, ${x.numero_end || 's/n'} — ${x.bairro}${x.pagamento_status === 'pendente' && ['pix_entrega', 'cartao_entrega', 'dinheiro'].includes(x.pagamento_forma) ? ` · COBRAR ${brl(x.total)}` : ' · pago'}`).join('\n')
+    + `\nValor da corrida: ${brl(custoTotal)}\nAbra suas entregas: ${linkEntregador(p.token_acesso)}`;
+  if (p.telefone) window.open(wa(p.telefone, msg), '_blank');
+  else { await navigator.clipboard?.writeText(msg).catch(() => { }); toast('Parceiro sem telefone: mensagem copiada'); }
+  toast(`${ids.length} pedido(s) com ${p.nome}`);
+  carregar();
+}
+
+// ---------------- ACERTO: quanto pagar e quanto o entregador deve devolver ----------------
+function acerto() {
+  const ini = $('#ac-ini')?.value || new Date(Date.now() - 6 * 864e5).toISOString().slice(0, 10);
+  const fim = $('#ac-fim')?.value || new Date().toISOString().slice(0, 10);
+  const ent = S.peds.filter(p => p.status === 'entregue' && p.parceiro_id && p.entregue_em && p.entregue_em.slice(0, 10) >= ini && p.entregue_em.slice(0, 10) <= fim);
+  const por = {};
+  ent.forEach(p => {
+    const r = (por[p.parceiro_id] ||= { n: 0, custo: 0, dinheiro: 0, pixcart: 0, conferir: [], frete: 0 });
+    r.n++; r.custo += +(p.custo_entrega || 0); r.frete += +p.frete;
+    if (p.pagamento_status === 'recebido_entregador') {
+      if (p.pagamento_forma === 'dinheiro') r.dinheiro += +p.total; else r.pixcart += +p.total;
+      r.conferir.push(p);
+    }
+  });
+  $('#vista').innerHTML = `
+    <div class="toolbar"><label>De <input type="date" id="ac-ini" value="${ini}"></label><label>Até <input type="date" id="ac-fim" value="${fim}"></label><span class="spacer"></span><button class="btn" id="ac-csv">Exportar CSV</button></div>
+    <div class="callout">Segregação: o entregador só marca “recebi”. A conferência do dinheiro, Pix e maquininha contra o caixa/extrato é feita pelo administrador. Dinheiro em mãos do entregador é descontado do valor da corrida.</div>
+    ${Object.keys(por).length ? `<div class="table-wrap"><table class="table"><thead><tr><th>Entregador</th><th class="num">Entregas</th><th class="num">Frete cobrado</th><th class="num">A pagar (corridas)</th><th class="num">Dinheiro com ele</th><th class="num">Pix/cartão a conferir</th><th class="num">Saldo</th><th></th></tr></thead><tbody>
+      ${Object.entries(por).map(([id, r]) => { const saldo = r.custo - r.dinheiro; return `<tr><td><strong>${esc(parc(+id)?.nome)}</strong></td><td class="num">${r.n}</td><td class="num">${brl(r.frete)}</td><td class="num">${brl(r.custo)}</td><td class="num">${brl(r.dinheiro)}</td><td class="num">${brl(r.pixcart)}</td>
+        <td class="num ${saldo < 0 ? 'neg' : 'pos'}">${saldo < 0 ? 'Devolver ' + brl(-saldo) : 'Pagar ' + brl(saldo)}</td>
+        <td>${isAdmin && r.conferir.length ? `<button class="btn btn--sm btn--primary" data-conferir="${r.conferir.map(p => p.id).join(',')}">Conferir ${r.conferir.length}</button>` : ''}</td></tr>`; }).join('')}
+    </tbody></table></div>` : '<div class="empty"><h3>Sem entregas no período</h3></div>'}`;
+  $('#ac-ini').onchange = $('#ac-fim').onchange = acerto;
+  $('#ac-csv').onclick = () => {
+    const linhas = [['pedido', 'entregue_em', 'entregador', 'bairro', 'frete', 'custo_entrega', 'pagamento', 'status_pagamento', 'total']]
+      .concat(ent.map(p => [p.numero, p.entregue_em, parc(p.parceiro_id)?.nome, p.bairro, p.frete, p.custo_entrega, PAGTO[p.pagamento_forma], PAG_ST[p.pagamento_status].t, p.total]));
+    baixar(`acerto-entregas-${ini}-a-${fim}.csv`, linhas);
+  };
+}
+function baixar(nome, linhas) {
+  const csv = '\ufeff' + linhas.map(l => l.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';')).join('\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = nome; a.click();
+}
+
+// ---------------- PARCEIROS ----------------
+function parceiros() {
+  $('#vista').innerHTML = `
+    ${isAdmin ? '<div class="toolbar"><span class="spacer"></span><button class="btn btn--mostarda" data-novo-parc>+ Novo parceiro</button></div>' : ''}
+    <div class="grid-cards">${S.parceiros.map(p => `<div class="ccard">
+      <h3>${esc(p.nome)} <span class="tag ${p.ativo ? 'tag--success' : ''}">${p.ativo ? p.tipo : 'inativo'}</span></h3>
+      <p>${esc(p.telefone || 'sem telefone')} · capacidade ${p.capacidade_kg ? p.capacidade_kg + ' kg' : 'livre'}</p>
+      <div class="linha"><span>Custo padrão</span><strong>${brl(p.custo_padrao)}</strong></div>
+      <div class="linha"><span>Adicional por parada</span><strong>${brl(p.adicional_parada)}</strong></div>
+      <p>${esc(p.observacoes || '')}</p>
+      <div class="acoes-row" style="margin-top:8px">
+        <button class="btn btn--sm" data-link="${p.token_acesso}">Copiar link do entregador</button>
+        ${isAdmin ? `<button class="btn btn--sm" data-edit-parc="${p.id}">Editar</button>` : ''}
+      </div></div>`).join('')}</div>
+    <h3 style="font-family:'Plus Jakarta Sans';margin:24px 0 6px">Custo por bairro</h3>
+    <p class="form-help" style="margin-bottom:10px">Quanto cada parceiro cobra para entregar em cada zona. É isso que o sistema usa para sugerir o mais barato.</p>
+    <div class="table-wrap"><table class="table"><thead><tr><th>Zona</th>${S.parceiros.filter(p => p.ativo).map(p => `<th class="num">${esc(p.nome)}</th>`).join('')}</tr></thead><tbody>
+      ${S.zonas.map(z => `<tr><td><strong>${esc(z.nome)}</strong><br><small class="form-help">cliente paga ${brl(z.taxa_cliente)}</small></td>${S.parceiros.filter(p => p.ativo).map(p => {
+        const t = S.tabela.find(x => x.parceiro_id === p.id && x.zona_id === z.id);
+        return `<td class="num"><input class="mini" ${isAdmin ? '' : 'disabled'} data-pz="${p.id}:${z.id}" value="${t ? (+t.custo).toFixed(2).replace('.', ',') : ''}" placeholder="${(+p.custo_padrao).toFixed(2).replace('.', ',')}"><br><input class="mini" ${isAdmin ? '' : 'disabled'} data-pzt="${p.id}:${z.id}" value="${t?.prazo_min ?? ''}" placeholder="min" style="margin-top:4px;width:60px"></td>`;
+      }).join('')}</tr>`).join('')}
+    </tbody></table></div>
+    ${isAdmin ? '<div class="toolbar" style="margin-top:10px"><span class="spacer"></span><button class="btn btn--primary" id="salvar-pz">Salvar tabela de custos</button></div>' : ''}`;
+  $('#salvar-pz')?.addEventListener('click', async () => {
+    const rows = [...document.querySelectorAll('[data-pz]')].filter(i => i.value.trim()).map(i => {
+      const [pid, zid] = i.dataset.pz.split(':').map(Number);
+      const pr = document.querySelector(`[data-pzt="${pid}:${zid}"]`).value;
+      return { parceiro_id: pid, zona_id: zid, custo: +i.value.replace(',', '.'), prazo_min: +pr || 40 };
+    });
+    const { error } = await supabase.from('parceiro_zona').upsert(rows);
+    if (error) return toast(error.message, 'error');
+    toast('Tabela salva'); carregar();
+  });
+}
+function formParc(p = {}) {
+  $('#form-box').innerHTML = `<div class="modal__header"><h2>${p.id ? 'Editar' : 'Novo'} parceiro</h2><button class="modal__close" data-close>×</button></div>
+  <form id="f-parc">
+    <div class="form-group"><label class="form-label">Nome</label><input class="form-control" name="nome" required value="${esc(p.nome || '')}"></div>
+    <div class="form-row"><div class="form-group"><label class="form-label">Tipo</label><select class="form-control" name="tipo">${['motoboy', 'app', 'proprio'].map(t => `<option ${p.tipo === t ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">WhatsApp</label><input class="form-control" name="telefone" value="${esc(p.telefone || '')}" placeholder="67999999999"></div></div>
+    <div class="form-row form-row--3"><div class="form-group"><label class="form-label">Custo padrão</label><input class="form-control" name="custo_padrao" value="${p.custo_padrao ?? 6}"></div>
+      <div class="form-group"><label class="form-label">Adicional/parada</label><input class="form-control" name="adicional_parada" value="${p.adicional_parada ?? 3}"></div>
+      <div class="form-group"><label class="form-label">Capacidade (kg)</label><input class="form-control" name="capacidade_kg" value="${p.capacidade_kg ?? ''}"></div></div>
+    <div class="form-group"><label class="form-label">Chave Pix do parceiro</label><input class="form-control" name="pix_chave" value="${esc(p.pix_chave || '')}"></div>
+    <div class="form-group"><label class="form-label">Observações</label><input class="form-control" name="observacoes" value="${esc(p.observacoes || '')}"></div>
+    <label class="switch"><input type="checkbox" name="ativo" ${p.ativo !== false ? 'checked' : ''}> Ativo</label>
+    ${p.id ? '<label class="switch" style="margin-top:8px"><input type="checkbox" name="novo_token"> Gerar novo link (o link antigo para de funcionar)</label>' : ''}
+    <div class="modal__actions"><button type="button" class="btn" data-close>Cancelar</button><button class="btn btn--primary">Salvar</button></div>
+  </form>`;
+  $('#m-form').classList.add('is-open');
+  $('#f-parc').onsubmit = async (e) => {
+    e.preventDefault(); const f = e.target; const n = (v) => v === '' ? null : +String(v).replace(',', '.');
+    const row = { nome: f.nome.value, tipo: f.tipo.value, telefone: f.telefone.value.replace(/\D/g, '') || null, custo_padrao: n(f.custo_padrao.value) ?? 0, adicional_parada: n(f.adicional_parada.value) ?? 0, capacidade_kg: n(f.capacidade_kg.value), pix_chave: f.pix_chave.value || null, observacoes: f.observacoes.value || null, ativo: f.ativo.checked };
+    if (f.novo_token?.checked) row.token_acesso = crypto.randomUUID();
+    const { error } = p.id ? await supabase.from('parceiros_entrega').update(row).eq('id', p.id) : await supabase.from('parceiros_entrega').insert(row);
+    if (error) return toast(error.message, 'error');
+    $('#m-form').classList.remove('is-open'); toast('Parceiro salvo'); carregar();
+  };
+}
+
+// ---------------- ZONAS ----------------
+function zonas() {
+  $('#vista').innerHTML = `${isAdmin ? '<div class="toolbar"><span class="spacer"></span><button class="btn btn--mostarda" data-nova-zona>+ Nova zona</button></div>' : ''}
+  <div class="table-wrap"><table class="table"><thead><tr><th>Zona</th><th>Bairros</th><th class="num">Taxa ao cliente</th><th class="num">Prazo</th><th class="num">Custo mais barato</th><th class="num">Resultado por entrega</th><th></th></tr></thead><tbody>
+    ${S.zonas.map(z => { const b = rankParceiros(S.parceiros, S.tabela, z.id)[0]; const r = +z.taxa_cliente - (b?.custo || 0);
+      return `<tr><td><strong>${esc(z.nome)}</strong> ${z.ativo ? '' : '<span class="tag">inativa</span>'}</td><td>${esc(z.bairros.join(', '))}</td><td class="num">${brl(z.taxa_cliente)}</td><td class="num">${z.prazo_min} min</td>
+      <td class="num">${b ? brl(b.custo) + '<br><small class="form-help">' + esc(b.nome) + '</small>' : '—'}</td><td class="num ${r < 0 ? 'neg' : 'pos'}">${brl(r)}</td>
+      <td>${isAdmin ? `<button class="btn btn--sm" data-edit-zona="${z.id}">Editar</button>` : ''}</td></tr>`; }).join('')}
+  </tbody></table></div>
+  <p class="form-help" style="margin-top:8px">Resultado negativo = a loja subsidia o frete daquele bairro. Ajuste a taxa ou negocie a corrida.</p>`;
+}
+function formZona(z = {}) {
+  $('#form-box').innerHTML = `<div class="modal__header"><h2>${z.id ? 'Editar' : 'Nova'} zona</h2><button class="modal__close" data-close>×</button></div>
+  <form id="f-zona">
+    <div class="form-group"><label class="form-label">Nome da zona</label><input class="form-control" name="nome" required value="${esc(z.nome || '')}"></div>
+    <div class="form-group"><label class="form-label">Bairros (separados por vírgula)</label><textarea class="form-control" name="bairros" rows="2">${esc((z.bairros || []).join(', '))}</textarea></div>
+    <div class="form-row form-row--3"><div class="form-group"><label class="form-label">Taxa ao cliente</label><input class="form-control" name="taxa_cliente" value="${z.taxa_cliente ?? 5}"></div>
+      <div class="form-group"><label class="form-label">Prazo (min)</label><input class="form-control" name="prazo_min" value="${z.prazo_min ?? 60}"></div>
+      <div class="form-group"><label class="form-label">Ordem</label><input class="form-control" name="ordem" value="${z.ordem ?? 0}"></div></div>
+    <label class="switch"><input type="checkbox" name="ativo" ${z.ativo !== false ? 'checked' : ''}> Ativa</label>
+    <div class="modal__actions"><button type="button" class="btn" data-close>Cancelar</button><button class="btn btn--primary">Salvar</button></div>
+  </form>`;
+  $('#m-form').classList.add('is-open');
+  $('#f-zona').onsubmit = async (e) => {
+    e.preventDefault(); const f = e.target;
+    const row = { nome: f.nome.value, bairros: f.bairros.value.split(',').map(s => s.trim()).filter(Boolean), taxa_cliente: +f.taxa_cliente.value.replace(',', '.'), prazo_min: +f.prazo_min.value, ordem: +f.ordem.value, ativo: f.ativo.checked };
+    const { error } = z.id ? await supabase.from('zonas_entrega').update(row).eq('id', z.id) : await supabase.from('zonas_entrega').insert(row);
+    if (error) return toast(error.message, 'error');
+    $('#m-form').classList.remove('is-open'); toast('Zona salva'); carregar();
+  };
+}
+
+document.addEventListener('click', async (e) => {
+  const t = e.target.closest('button, .modal-bg'); if (!t) return;
+  if (t.dataset.aba) { S.aba = t.dataset.aba; document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('is-on', b === t)); render(); }
+  else if (t.dataset.despachar) despachar(+t.dataset.despachar);
+  else if (t.dataset.desfazer) { await supabase.from('pedidos').update({ parceiro_id: null, custo_entrega: null, rota_grupo: null }).eq('id', +t.dataset.desfazer); carregar(); }
+  else if (t.dataset.link) { const l = linkEntregador(t.dataset.link); try { await navigator.clipboard.writeText(l); toast('Link copiado'); } catch { prompt('Copie o link:', l); } }
+  else if (t.dataset.editParc) formParc(parc(+t.dataset.editParc));
+  else if (t.dataset.novoParc !== undefined) formParc();
+  else if (t.dataset.editZona) formZona(zona(+t.dataset.editZona));
+  else if (t.dataset.novaZona !== undefined) formZona();
+  else if (t.dataset.conferir) {
+    if (!confirm('Confirmar que os valores foram conferidos no caixa/extrato?')) return;
+    const { error } = await supabase.from('pedidos').update({ pagamento_status: 'conferido' }).in('id', t.dataset.conferir.split(',').map(Number));
+    if (error) return toast(error.message, 'error'); toast('Pagamentos conferidos'); carregar();
+  }
+  else if (t.dataset.close !== undefined || t.classList.contains('modal-bg') && e.target === t) document.querySelectorAll('.modal-bg').forEach(m => m.classList.remove('is-open'));
+});
+carregar();
+setInterval(() => { if (S.aba === 'despacho' && !document.querySelector('.modal-bg.is-open')) carregar(); }, 30000);
+</script>
+</body>
+</html>

@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Marketplaces — Quintal Admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/admin/css/admin.css">
+  <link rel="stylesheet" href="/admin/css/loja-admin.css">
+</head>
+<body>
+<div class="app">
+  <main class="main">
+    <div class="page-header">
+      <div><div class="breadcrumb">Loja online</div><h1>Marketplaces e canais</h1></div>
+    </div>
+    <div class="tabs" id="tabs">
+      <button data-aba="canais" class="is-on">Canais</button>
+      <button data-aba="precos">Preço por canal</button>
+      <button data-aba="exportar">Exportar catálogo</button>
+      <button data-aba="vendas">Vendas por canal</button>
+    </div>
+    <div id="vista"><div class="loading">Carregando…</div></div>
+  </main>
+</div>
+<div class="modal-bg" id="m-form"><div class="modal" id="form-box"></div></div>
+
+<script src="/admin/js/config.js"></script>
+<script type="module">
+import { supabase, requireAuth, toast } from '/admin/js/supabase-client.js';
+import { renderSidebar } from '/admin/js/sidebar.js';
+import { esc, brl, SITE } from '/admin/js/loja-admin.js';
+
+const auth = await requireAuth(['admin']); if (!auth) throw new Error('sem auth');
+renderSidebar(auth.perfil, 'marketplaces');
+const $ = (s) => document.querySelector(s);
+const S = { aba: 'canais', canais: [], prods: [], custos: {}, pc: [], peds: [], canalSel: null };
+
+const GUIA = {
+  'aiqfome': ['Painel do parceiro aiqfome: manter cardápio com os mesmos SKUs.', 'Pedidos do app: registrar em Pedidos › “Pedido de outro canal” (ou via integrador).', 'Entrega própria com os motoboys parceiros pelo módulo Entregas.'],
+  'ifood': ['Cadastro em parceiros.ifood.com.br na categoria Mercado/Pet.', 'Escolher Plano Básico (entrega própria) para usar os motoboys da loja e pagar comissão menor.', 'Importar catálogo pelo CSV desta tela.'],
+  'mercado-livre': ['Conta vendedor + Mercado Pago no CNPJ da loja.', 'Ativar Mercado Envios Flex: a própria loja entrega em Chapadão no mesmo dia.', 'Subir anúncios pela planilha do ML ou via integrador (Bling).'],
+  'shopee': ['Seller Centre no CNPJ. Taxa muda acima de R$ 79,99: conferir preço por faixa.', 'Importação em massa pelo modelo de planilha da Shopee.', 'Envio pela Shopee Xpress ou entrega local.'],
+  'amazon': ['Conta Vender na Amazon (plano profissional).', 'Rações e antiparasitários podem exigir aprovação de categoria/registro.', 'DBA (envio pelo vendedor) ou FBA onde compensar.'],
+  'magalu': ['Cadastro em Parceiro Magalu.', 'Subir catálogo via integrador homologado (Bling, Tiny/Olist).', 'Logística Magalu Entregas.'],
+  'site': ['Canal sem comissão: deve ter o melhor preço.', 'Divulgar o link /loja em Instagram, Google Meu Negócio e status do WhatsApp.'],
+};
+
+async function carregar() {
+  const [c, p, cu, pc, ped] = await Promise.all([
+    supabase.from('canais_venda').select('*').order('ordem'),
+    supabase.from('produtos').select('id,nome,sku,gtin,descricao,foto_url,unidade,preco_normal,preco_pix,estoque,peso_kg,vende_online,ativo,categorias(nome),marcas(nome)').eq('ativo', true).order('nome'),
+    supabase.from('produtos_custos').select('*'),
+    supabase.from('produto_canal').select('*'),
+    supabase.from('pedidos').select('canal_id,total,frete,custo_entrega,status,created_at').gte('created_at', new Date(Date.now() - 30 * 864e5).toISOString()).neq('status', 'cancelado'),
+  ]);
+  S.canais = c.data || []; S.prods = p.data || []; S.pc = pc.data || []; S.peds = ped.data || [];
+  S.custos = Object.fromEntries((cu.data || []).map(x => [x.produto_id, +x.custo]));
+  S.canalSel ||= S.canais.find(c => c.slug === 'mercado-livre')?.id || S.canais[0]?.id;
+  render();
+}
+const render = () => ({ canais, precos, exportar, vendas })[S.aba]();
+const ST = { planejado: '', cadastrando: 'tag--mostarda', ativo: 'tag--success', pausado: 'tag--danger' };
+
+// preço que mantém a margem alvo no canal: P = (custo + tarifa + frete) / (1 - comissão - margem)
+function sugerido(prod, canal) {
+  const c = +canal.comissao_pct / 100, m = +canal.margem_alvo_pct / 100;
+  const custo = S.custos[prod.id];
+  if (custo) { const d = 1 - c - m; return d > 0 ? (custo + +canal.tarifa_fixa + +canal.custo_frete_medio) / d : null; }
+  // sem custo: mesmo líquido que o site
+  return prod.preco_normal ? (+prod.preco_normal + +canal.tarifa_fixa + +canal.custo_frete_medio) / (1 - c) : null;
+}
+const liquido = (preco, canal) => preco - preco * +canal.comissao_pct / 100 - +canal.tarifa_fixa - +canal.custo_frete_medio;
+
+function canais() {
+  $('#vista').innerHTML = `
+    <div class="callout"><strong>Caminho mais barato para vender em todos:</strong> manter o catálogo aqui (SKU, EAN, peso e foto), exportar para cada canal e registrar os pedidos na mesma fila de entrega. Quando o volume passar de ~10 pedidos/dia nos marketplaces, ligar um integrador (Bling a partir de R$ 60/mês) para sincronizar estoque e pedidos automaticamente.</div>
+    <div class="grid-cards">${S.canais.map(c => `<div class="ccard">
+      <h3>${esc(c.nome)} <span class="tag ${ST[c.status]}">${c.status}</span></h3>
+      <div class="linha"><span>Comissão</span><strong>${(+c.comissao_pct).toLocaleString('pt-BR')}%${+c.tarifa_fixa ? ' + ' + brl(c.tarifa_fixa) : ''}</strong></div>
+      <div class="linha"><span>Frete médio pago pela loja</span><strong>${brl(c.custo_frete_medio)}</strong></div>
+      <div class="linha"><span>Margem alvo</span><strong>${(+c.margem_alvo_pct).toLocaleString('pt-BR')}%</strong></div>
+      <p>${esc(c.observacoes || '')}</p>
+      <ol class="steps-int">${(GUIA[c.slug] || []).map(s => `<li>${esc(s)}</li>`).join('')}</ol>
+      <div class="acoes-row" style="margin-top:10px"><button class="btn btn--sm" data-edit="${c.id}">Editar taxas</button>${c.url_loja ? `<a class="btn btn--sm" href="${esc(c.url_loja)}" target="_blank">Abrir loja</a>` : ''}</div>
+    </div>`).join('')}</div>`;
+}
+function formCanal(c) {
+  $('#form-box').innerHTML = `<div class="modal__header"><h2>${esc(c.nome)}</h2><button class="modal__close" data-close>×</button></div>
+  <form id="f-canal">
+    <div class="form-row form-row--3">
+      <div class="form-group"><label class="form-label">Comissão %</label><input class="form-control" name="comissao_pct" value="${c.comissao_pct}"></div>
+      <div class="form-group"><label class="form-label">Tarifa fixa R$</label><input class="form-control" name="tarifa_fixa" value="${c.tarifa_fixa}"></div>
+      <div class="form-group"><label class="form-label">Frete médio R$</label><input class="form-control" name="custo_frete_medio" value="${c.custo_frete_medio}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Margem alvo %</label><input class="form-control" name="margem_alvo_pct" value="${c.margem_alvo_pct}"></div>
+      <div class="form-group"><label class="form-label">Status</label><select class="form-control" name="status">${['planejado', 'cadastrando', 'ativo', 'pausado'].map(s => `<option ${c.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+    </div>
+    <div class="form-group"><label class="form-label">Link da loja no canal</label><input class="form-control" name="url_loja" value="${esc(c.url_loja || '')}"></div>
+    <div class="form-group"><label class="form-label">Observações</label><textarea class="form-control" name="observacoes" rows="2">${esc(c.observacoes || '')}</textarea></div>
+    <div class="modal__actions"><button type="button" class="btn" data-close>Cancelar</button><button class="btn btn--primary">Salvar</button></div>
+  </form>`;
+  $('#m-form').classList.add('is-open');
+  $('#f-canal').onsubmit = async (e) => {
+    e.preventDefault(); const f = e.target; const n = (v) => +String(v).replace(',', '.') || 0;
+    const { error } = await supabase.from('canais_venda').update({ comissao_pct: n(f.comissao_pct.value), tarifa_fixa: n(f.tarifa_fixa.value), custo_frete_medio: n(f.custo_frete_medio.value), margem_alvo_pct: n(f.margem_alvo_pct.value), status: f.status.value, url_loja: f.url_loja.value || null, observacoes: f.observacoes.value || null }).eq('id', c.id);
+    if (error) return toast(error.message, 'error');
+    $('#m-form').classList.remove('is-open'); toast('Canal atualizado'); carregar();
+  };
+}
+
+function precos() {
+  const canal = S.canais.find(c => c.id === S.canalSel);
+  const prods = S.prods.filter(p => p.vende_online);
+  $('#vista').innerHTML = `
+    <div class="toolbar"><label>Canal <select id="sel-canal">${S.canais.filter(c => c.slug !== 'site').map(c => `<option value="${c.id}" ${c.id === S.canalSel ? 'selected' : ''}>${esc(c.nome)}</option>`).join('')}</select></label>
+      <span class="form-help">Comissão ${(+canal.comissao_pct).toLocaleString('pt-BR')}% + ${brl(canal.tarifa_fixa)} · margem alvo ${canal.margem_alvo_pct}%</span><span class="spacer"></span>
+      <button class="btn" id="usar-sug">Aplicar sugeridos</button><button class="btn btn--primary" id="salvar-precos">Salvar custos e preços</button></div>
+    <p class="form-help" style="margin-bottom:10px">Informe o custo de compra para calcular o preço que mantém a margem. Sem custo, o sugerido mantém o mesmo valor líquido do site. Custos ficam visíveis só para administradores.</p>
+    <div class="table-wrap"><table class="table"><thead><tr><th>Produto</th><th class="num">Custo</th><th class="num">Preço site</th><th class="num">Sugerido no canal</th><th class="num">Preço no canal</th><th class="num">Líquido</th><th class="num">Margem</th></tr></thead><tbody>
+      ${prods.map(p => {
+        const sug = sugerido(p, canal); const atual = S.pc.find(x => x.produto_id === p.id && x.canal_id === canal.id)?.preco_canal;
+        const preco = atual ?? null; const liq = preco ? liquido(+preco, canal) : null; const cu = S.custos[p.id];
+        const mg = liq != null && cu ? (liq - cu) / preco * 100 : null;
+        return `<tr data-id="${p.id}"><td>${esc(p.nome)}<br><small class="form-help">${esc(p.sku || 'sem SKU')}</small></td>
+          <td class="num"><input class="mini" data-custo value="${cu != null ? cu.toFixed(2).replace('.', ',') : ''}" placeholder="R$"></td>
+          <td class="num">${brl(p.preco_normal)}</td><td class="num" data-sug="${sug ? sug.toFixed(2) : ''}">${sug ? brl(Math.ceil(sug) - 0.1) : '—'}</td>
+          <td class="num"><input class="mini" data-preco value="${preco != null ? (+preco).toFixed(2).replace('.', ',') : ''}"></td>
+          <td class="num">${liq != null ? brl(liq) : '—'}</td><td class="num ${mg != null && mg < +canal.margem_alvo_pct ? 'neg' : 'pos'}">${mg != null ? mg.toFixed(1).replace('.', ',') + '%' : '—'}</td></tr>`;
+      }).join('')}
+    </tbody></table></div>`;
+  $('#sel-canal').onchange = (e) => { S.canalSel = +e.target.value; precos(); };
+  $('#usar-sug').onclick = () => document.querySelectorAll('tr[data-id]').forEach(tr => { const s = tr.querySelector('[data-sug]').dataset.sug; if (s) tr.querySelector('[data-preco]').value = (Math.ceil(+s) - 0.1).toFixed(2).replace('.', ','); });
+  $('#salvar-precos').onclick = async () => {
+    const n = (v) => v.trim() === '' ? null : +v.replace(',', '.');
+    const custos = [], pcs = [];
+    document.querySelectorAll('tr[data-id]').forEach(tr => {
+      const id = +tr.dataset.id, cu = n(tr.querySelector('[data-custo]').value), pr = n(tr.querySelector('[data-preco]').value);
+      if (cu != null) custos.push({ produto_id: id, custo: cu, updated_at: new Date().toISOString() });
+      if (pr != null) pcs.push({ produto_id: id, canal_id: S.canalSel, preco_canal: pr, updated_at: new Date().toISOString() });
+    });
+    const r1 = custos.length ? await supabase.from('produtos_custos').upsert(custos) : {};
+    const r2 = pcs.length ? await supabase.from('produto_canal').upsert(pcs) : {};
+    if (r1.error || r2.error) return toast((r1.error || r2.error).message, 'error');
+    toast('Salvo'); carregar();
+  };
+}
+
+function exportar() {
+  $('#vista').innerHTML = `
+    <div class="callout">Gera planilha com SKU, título, descrição, EAN, preço do canal, estoque, peso e link da foto. Use no importador em massa de cada marketplace ou no integrador. Produtos sem SKU/EAN costumam ser recusados: complete em Produtos.</div>
+    <div class="grid-cards">${S.canais.map(c => {
+      const prods = S.prods.filter(p => p.vende_online);
+      const semEan = prods.filter(p => !p.gtin).length;
+      return `<div class="ccard"><h3>${esc(c.nome)}</h3><p>${prods.length} produtos · ${semEan} sem EAN</p>
+        <button class="btn btn--sm btn--mostarda" data-csv="${c.id}" style="margin-top:8px">Baixar CSV</button></div>`;
+    }).join('')}</div>`;
+}
+function csv(canalId) {
+  const c = S.canais.find(x => x.id === canalId);
+  const linhas = [['sku', 'titulo', 'descricao', 'ean', 'marca', 'categoria', 'preco', 'estoque', 'peso_kg', 'unidade', 'foto_url']];
+  S.prods.filter(p => p.vende_online).forEach(p => {
+    const pc = S.pc.find(x => x.produto_id === p.id && x.canal_id === c.id)?.preco_canal;
+    const preco = pc ?? (c.slug === 'site' ? p.preco_normal : (sugerido(p, c) ? Math.ceil(sugerido(p, c)) - 0.1 : p.preco_normal));
+    const foto = p.foto_url ? (/^https?:/.test(p.foto_url) ? p.foto_url : SITE + p.foto_url) : '';
+    linhas.push([p.sku || `QR-${p.id}`, p.nome, p.descricao || '', p.gtin || '', p.marcas?.nome || '', p.categorias?.nome || '', preco != null ? (+preco).toFixed(2) : '', p.estoque ?? 0, p.peso_kg ?? '', p.unidade, foto]);
+  });
+  const txt = '\ufeff' + linhas.map(l => l.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';')).join('\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt], { type: 'text/csv;charset=utf-8' }));
+  a.download = `catalogo-quintal-${c.slug}-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+}
+
+function vendas() {
+  const por = S.canais.map(c => {
+    const ps = S.peds.filter(p => (p.canal_id ?? null) === c.id);
+    const fat = ps.reduce((s, p) => s + +p.total, 0);
+    const com = fat * +c.comissao_pct / 100 + ps.length * +c.tarifa_fixa;
+    const log = ps.reduce((s, p) => s + +(p.custo_entrega || 0) - +p.frete, 0);
+    return { c, n: ps.length, fat, com, log, liq: fat - com - log };
+  });
+  const sem = S.peds.filter(p => p.canal_id == null);
+  $('#vista').innerHTML = `<p class="form-help" style="margin-bottom:10px">Últimos 30 dias, sem cancelados. Comissão estimada pelas taxas cadastradas.</p>
+  <div class="table-wrap"><table class="table"><thead><tr><th>Canal</th><th class="num">Pedidos</th><th class="num">Faturamento</th><th class="num">Ticket médio</th><th class="num">Comissão</th><th class="num">Logística líquida</th><th class="num">Receita líquida</th></tr></thead><tbody>
+    ${por.map(r => `<tr><td><strong>${esc(r.c.nome)}</strong></td><td class="num">${r.n}</td><td class="num">${brl(r.fat)}</td><td class="num">${brl(r.n ? r.fat / r.n : 0)}</td><td class="num">${brl(r.com)}</td><td class="num ${r.log > 0 ? 'neg' : ''}">${brl(-r.log)}</td><td class="num"><strong>${brl(r.liq)}</strong></td></tr>`).join('')}
+    ${sem.length ? `<tr><td>WhatsApp / balcão</td><td class="num">${sem.length}</td><td class="num">${brl(sem.reduce((s, p) => s + +p.total, 0))}</td><td colspan="4"></td></tr>` : ''}
+  </tbody></table></div>`;
+}
+
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('button, .modal-bg'); if (!t) return;
+  if (t.dataset.aba) { S.aba = t.dataset.aba; document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('is-on', b === t)); render(); }
+  else if (t.dataset.edit) formCanal(S.canais.find(c => c.id === +t.dataset.edit));
+  else if (t.dataset.csv) csv(+t.dataset.csv);
+  else if (t.dataset.close !== undefined || (t.classList.contains('modal-bg') && e.target === t)) document.querySelectorAll('.modal-bg').forEach(m => m.classList.remove('is-open'));
+});
+carregar();
+</script>
+</body>
+</html>

@@ -4,6 +4,10 @@ import { supabase } from '/admin/js/supabase-client.js';
 export function renderSidebar(perfil, active = '') {
   const items = [
     { id: 'dashboard', href: '/admin/dashboard.html', label: 'Início', icon: '◆', roles: ['admin','vendedor'] },
+    { id: 'pedidos',   href: '/admin/pedidos.html',   label: 'Pedidos', icon: '▶', roles: ['admin','vendedor'] },
+    { id: 'entregas',  href: '/admin/entregas.html',  label: 'Entregas', icon: '➜', roles: ['admin','vendedor'] },
+    { id: 'marketplaces', href: '/admin/marketplaces.html', label: 'Marketplaces', icon: '◎', roles: ['admin'] },
+    { id: 'loja',      href: '/admin/loja.html',      label: 'Loja online', icon: '⚙', roles: ['admin'] },
     { id: 'produtos',  href: '/admin/produtos.html',  label: 'Produtos', icon: '▣', roles: ['admin','vendedor'] },
     { id: 'precos',    href: '/admin/precos.html',    label: 'Preços', icon: '$', roles: ['admin','vendedor'] },
     { id: 'banners',   href: '/admin/banners.html',   label: 'Banners',   icon: '▤', roles: ['admin'] },

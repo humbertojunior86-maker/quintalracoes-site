@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Pedidos — Quintal Admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/admin/css/admin.css">
+  <link rel="stylesheet" href="/admin/css/loja-admin.css">
+</head>
+<body>
+<div class="app">
+  <main class="main">
+    <div class="page-header">
+      <div><div class="breadcrumb">Loja online</div><h1>Pedidos</h1></div>
+      <div class="acoes-row">
+        <button class="btn" id="btn-externo">+ Pedido de outro canal</button>
+        <a href="/loja/" target="_blank" class="btn">↗ Ver loja</a>
+      </div>
+    </div>
+
+    <div class="kpis" id="kpis"><div class="loading">Carregando…</div></div>
+
+    <div class="tabs" id="tabs"></div>
+    <div class="toolbar">
+      <input class="search" id="busca" placeholder="Buscar nº, cliente, telefone, bairro">
+      <select id="f-canal"><option value="">Todos os canais</option></select>
+      <span class="spacer"></span>
+      <label class="switch" style="font-size:13px"><input type="checkbox" id="som" checked> Alerta sonoro de novo pedido</label>
+    </div>
+    <div id="vista"></div>
+  </main>
+</div>
+
+<!-- detalhe -->
+<div class="modal-bg" id="m-det"><div class="modal modal--lg" id="det"></div></div>
+
+<!-- pedido externo -->
+<div class="modal-bg" id="m-ext"><div class="modal modal--lg">
+  <div class="modal__header"><h2>Registrar pedido de outro canal</h2><button class="modal__close" data-close>×</button></div>
+  <p class="form-help" style="margin-top:-6px">Use para pedidos do aiqfome, iFood, Mercado Livre, Shopee, Amazon, Magalu, WhatsApp ou balcão. Tudo entra na mesma fila de separação e entrega.</p>
+  <form id="f-ext">
+    <div class="form-row form-row--3">
+      <div class="form-group"><label class="form-label">Canal</label><select class="form-control" name="canal_id" required></select></div>
+      <div class="form-group"><label class="form-label">Nº do pedido no canal</label><input class="form-control" name="pedido_externo"></div>
+      <div class="form-group"><label class="form-label">Pagamento</label><select class="form-control" name="pagamento_forma">
+        <option value="marketplace">Pago no canal</option><option value="pix_entrega">Pix na entrega</option><option value="cartao_entrega">Cartão na entrega</option><option value="dinheiro">Dinheiro</option><option value="pix_online">Pix já recebido</option></select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Cliente</label><input class="form-control" name="cliente_nome" required></div>
+      <div class="form-group"><label class="form-label">Telefone</label><input class="form-control" name="cliente_telefone" required></div>
+    </div>
+    <div class="form-row form-row--3">
+      <div class="form-group"><label class="form-label">Modalidade</label><select class="form-control" name="modalidade"><option value="entrega">Entrega local</option><option value="retirada">Retirada</option><option value="envio">Envio (Correios/transportadora do canal)</option></select></div>
+      <div class="form-group"><label class="form-label">Bairro / zona</label><select class="form-control" name="zona_id"><option value="">—</option></select></div>
+      <div class="form-group"><label class="form-label">Frete cobrado</label><input class="form-control" name="frete" inputmode="decimal" value="0"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Endereço</label><input class="form-control" name="endereco"></div>
+    <div class="form-group"><label class="form-label">Itens</label>
+      <div id="ext-itens"></div>
+      <button type="button" class="btn btn--sm" id="ext-add">+ Item</button>
+    </div>
+    <div class="det-linha det-linha--tot"><span>Total</span><span id="ext-total">R$ 0,00</span></div>
+    <div class="modal__actions"><button type="button" class="btn" data-close>Cancelar</button><button class="btn btn--primary">Registrar pedido</button></div>
+  </form>
+</div></div>
+
+<script src="/admin/js/config.js"></script>
+<script type="module">
+import { supabase, requireAuth, toast } from '/admin/js/supabase-client.js';
+import { renderSidebar } from '/admin/js/sidebar.js';
+import { STATUS, FLUXO, PROX, ACAO, PAGTO, PAG_ST, esc, brl, wa, tempo, minutos, statusTag, msgCliente, rankParceiros, linkEntregador } from '/admin/js/loja-admin.js';
+
+const auth = await requireAuth(); if (!auth) throw new Error('sem auth');
+renderSidebar(auth.perfil, 'pedidos');
+const isAdmin = auth.perfil.role === 'admin';
+const $ = (s) => document.querySelector(s);
+
+const S = { peds: [], canais: [], zonas: [], parceiros: [], tabela: [], prods: [], aba: 'ativos', busca: '', canal: '', vistos: new Set() };
+
+async function base() {
+  const [c, z, p, t, pr] = await Promise.all([
+    supabase.from('canais_venda').select('*').order('ordem'),
+    supabase.from('zonas_entrega').select('*').order('ordem'),
+    supabase.from('parceiros_entrega').select('*').order('id'),
+    supabase.from('parceiro_zona').select('*'),
+    supabase.from('produtos').select('id,nome,preco_normal,preco_pix,unidade,peso_kg').eq('ativo', true).order('nome'),
+  ]);
+  S.canais = c.data || []; S.zonas = z.data || []; S.parceiros = p.data || []; S.tabela = t.data || []; S.prods = pr.data || [];
+  $('#f-canal').innerHTML += S.canais.map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join('');
+}
+const canal = (id) => S.canais.find(c => c.id === id);
+const parceiro = (id) => S.parceiros.find(p => p.id === id);
+const peso = (p) => (p.pedido_itens || []).reduce((s, i) => s + (+i.produtos?.peso_kg || 0) * +i.quantidade, 0);
+
+async function carregar() {
+  const desde = new Date(Date.now() - 7 * 864e5).toISOString();
+  const { data, error } = await supabase.from('pedidos')
+    .select('*, pedido_itens(id,nome,quantidade,preco_unit,total,produto_id,produtos(peso_kg,unidade))')
+    .or(`status.in.(novo,confirmado,separando,pronto,em_rota),created_at.gte.${desde}`)
+    .order('created_at', { ascending: false }).limit(500);
+  if (error) return toast(error.message, 'error');
+  const novos = (data || []).filter(p => p.status === 'novo' && S.vistos.size && !S.vistos.has(p.id));
+  if (novos.length && $('#som').checked) bip();
+  if (novos.length) document.title = `(${novos.length}) Novo pedido — Quintal`;
+  (data || []).forEach(p => S.vistos.add(p.id));
+  S.peds = data || [];
+  render();
+}
+function bip() {
+  try { const a = new AudioContext(), o = a.createOscillator(), g = a.createGain(); o.connect(g); g.connect(a.destination); o.frequency.value = 880; g.gain.value = .15; o.start(); setTimeout(() => { o.frequency.value = 1320; }, 180); setTimeout(() => { o.stop(); a.close(); }, 400); } catch { }
+}
+
+function render() {
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const doDia = S.peds.filter(p => new Date(p.created_at) >= hoje && p.status !== 'cancelado');
+  const fat = doDia.reduce((s, p) => s + +p.total, 0);
+  const freteCob = doDia.reduce((s, p) => s + +p.frete, 0);
+  const custoEnt = doDia.reduce((s, p) => s + +(p.custo_entrega || 0), 0);
+  const conferir = S.peds.filter(p => p.pagamento_status === 'recebido_entregador').length;
+  const pendPag = S.peds.filter(p => p.status !== 'cancelado' && p.pagamento_status === 'pendente' && ['pix_online', 'cartao_online'].includes(p.pagamento_forma)).length;
+  $('#kpis').innerHTML = `
+    <div class="kpi"><div class="kpi__label">Pedidos hoje</div><div class="kpi__value">${doDia.length}</div><div class="kpi__delta">${S.peds.filter(p => FLUXO.slice(0, 5).includes(p.status)).length} em andamento</div></div>
+    <div class="kpi"><div class="kpi__label">Faturamento hoje</div><div class="kpi__value">${brl(fat)}</div><div class="kpi__delta">Ticket médio ${brl(doDia.length ? fat / doDia.length : 0)}</div></div>
+    <div class="kpi"><div class="kpi__label">Resultado logístico hoje</div><div class="kpi__value ${freteCob - custoEnt < 0 ? 'neg' : ''}">${brl(freteCob - custoEnt)}</div><div class="kpi__delta" style="color:var(--muted)">Frete ${brl(freteCob)} − custo ${brl(custoEnt)}</div></div>
+    <div class="kpi"><div class="kpi__label">Pagamentos a conferir</div><div class="kpi__value">${conferir + pendPag}</div><div class="kpi__delta" style="color:${conferir + pendPag ? 'var(--danger)' : 'var(--success)'}">${conferir} com entregador · ${pendPag} online pendentes</div></div>`;
+
+  const abas = [['ativos', 'Em andamento'], ...FLUXO.map(s => [s, STATUS[s].t]), ['cancelado', 'Cancelados'], ['conferir', 'Conferir pagamento']];
+  const cont = (a) => filtrar(a).length;
+  $('#tabs').innerHTML = abas.map(([k, t]) => `<button data-aba="${k}" class="${S.aba === k ? 'is-on' : ''}">${t}<span class="n">${cont(k)}</span></button>`).join('');
+
+  const lista = filtrar(S.aba);
+  if (S.aba === 'ativos') {
+    const cols = FLUXO.slice(0, 5);
+    $('#vista').innerHTML = `<div class="kanban">${cols.map(s => {
+      const ps = lista.filter(p => p.status === s);
+      return `<div class="kcol"><h4><span>${STATUS[s].t}</span><span>${ps.length}</span></h4>${ps.map(cardK).join('') || '<p class="form-help" style="margin:4px">—</p>'}</div>`;
+    }).join('')}</div>`;
+  } else {
+    $('#vista').innerHTML = lista.length ? `<div class="table-wrap"><table class="table"><thead><tr><th>Nº</th><th>Quando</th><th>Canal</th><th>Cliente</th><th>Bairro</th><th>Status</th><th>Pagamento</th><th class="num">Total</th></tr></thead><tbody>
+      ${lista.map(p => `<tr data-ped="${p.id}" style="cursor:pointer"><td><strong>#${p.numero}</strong></td><td>${new Date(p.created_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</td>
+        <td><span class="canal">${esc(canal(p.canal_id)?.nome || 'Site')}</span></td><td>${esc(p.cliente_nome)}</td><td>${esc(p.bairro || (p.modalidade === 'retirada' ? 'Retirada' : '—'))}</td>
+        <td>${statusTag(p.status)}</td><td><span class="tag ${PAG_ST[p.pagamento_status].c}">${PAG_ST[p.pagamento_status].t}</span> <small>${PAGTO[p.pagamento_forma]}</small></td><td class="num">${brl(p.total)}</td></tr>`).join('')}
+      </tbody></table></div>` : '<div class="empty"><h3>Nenhum pedido aqui</h3><p>Os pedidos da loja e dos canais aparecem nesta tela.</p></div>';
+  }
+}
+function filtrar(aba) {
+  const q = S.busca.toLowerCase();
+  return S.peds.filter(p => {
+    if (S.canal && String(p.canal_id) !== S.canal) return false;
+    if (q && !`${p.numero} ${p.cliente_nome} ${p.cliente_telefone} ${p.bairro} ${p.pedido_externo || ''}`.toLowerCase().includes(q)) return false;
+    if (aba === 'ativos') return FLUXO.slice(0, 5).includes(p.status);
+    if (aba === 'conferir') return p.status !== 'cancelado' && (p.pagamento_status === 'recebido_entregador' || (p.pagamento_status === 'pendente' && p.status === 'entregue'));
+    return p.status === aba;
+  });
+}
+function cardK(p) {
+  const m = minutos(p.created_at);
+  const sla = p.status === 'novo' ? (m > 10 ? 'is-late' : m > 5 ? 'is-warn' : '') : (m > 90 ? 'is-late' : m > 60 ? 'is-warn' : '');
+  const par = parceiro(p.parceiro_id);
+  return `<div class="kcard ${sla}" data-ped="${p.id}">
+    <div class="kcard__top"><strong>#${p.numero}</strong><span class="canal">${esc(canal(p.canal_id)?.nome || 'Site')}</span><span class="kcard__t">${tempo(p.created_at)}</span></div>
+    <div class="kcard__cli">${esc(p.cliente_nome)}</div>
+    <div class="kcard__meta">${p.modalidade === 'retirada' ? 'Retirada na loja' : esc(p.bairro || 'Envio')} · ${(p.pedido_itens || []).length} itens${par ? ' · ' + esc(par.nome) : ''}</div>
+    <div class="kcard__foot"><strong>${brl(p.total)}</strong><span class="tag ${PAG_ST[p.pagamento_status].c}">${PAGTO[p.pagamento_forma]}</span></div>
+    ${PROX[p.status] ? `<button class="btn btn--sm btn--mostarda btn--block" style="margin-top:8px" data-avancar="${p.id}">${p.modalidade === 'retirada' && p.status === 'pronto' ? 'Retirado' : ACAO[p.status]}</button>` : ''}
+  </div>`;
+}
+
+// --------- ações ---------
+async function mudarStatus(p, novo, extra = {}) {
+  if (novo === 'em_rota' && p.modalidade === 'entrega' && !p.parceiro_id && !extra.parceiro_id) { abrirDet(p.id); return toast('Escolha o entregador antes de despachar', 'error'); }
+  const { error } = await supabase.from('pedidos').update({ status: novo, ...extra }).eq('id', p.id);
+  if (error) return toast(error.message, 'error');
+  Object.assign(p, { status: novo, ...extra });
+  toast(`#${p.numero}: ${STATUS[novo].t}`);
+  await carregar();
+  if (!$('#m-det').classList.contains('is-open')) return;
+  abrirDet(p.id);
+}
+function avancar(p) {
+  const prox = p.modalidade === 'retirada' && p.status === 'pronto' ? 'entregue' : PROX[p.status];
+  mudarStatus(p, prox);
+}
+
+function abrirDet(id) {
+  const p = S.peds.find(x => x.id === id); if (!p) return;
+  const kg = peso(p);
+  const rank = p.modalidade === 'entrega' && p.zona_id ? rankParceiros(S.parceiros, S.tabela, p.zona_id, 1, kg) : [];
+  const maisRapido = rank.length ? [...rank].filter(r => r.cabe).sort((a, b) => a.prazo - b.prazo)[0] : null;
+  const prox = p.modalidade === 'retirada' && p.status === 'pronto' ? 'entregue' : PROX[p.status];
+  $('#det').innerHTML = `
+    <div class="modal__header"><h2>Pedido #${p.numero} ${statusTag(p.status)}</h2><button class="modal__close" data-close>×</button></div>
+    <div class="det-grid">
+      <div>
+        <div class="det-box"><h4>Itens · ${kg ? kg.toFixed(1).replace('.', ',') + ' kg' : ''}</h4>
+          ${(p.pedido_itens || []).map(i => `<div class="det-linha"><span>${+i.quantidade}${i.produtos?.unidade === 'kg' ? ' kg' : '×'} ${esc(i.nome)}</span><span>${brl(i.total)}</span></div>`).join('')}
+          <div class="det-linha"><span>Frete cobrado</span><span>${brl(p.frete)}</span></div>
+          <div class="det-linha det-linha--tot"><span>Total</span><span>${brl(p.total)}</span></div>
+          ${p.custo_entrega != null ? `<div class="det-linha"><span>Custo da entrega</span><span class="${p.frete - p.custo_entrega < 0 ? 'neg' : 'pos'}">${brl(p.custo_entrega)} (${p.frete - p.custo_entrega >= 0 ? '+' : ''}${brl(p.frete - p.custo_entrega)})</span></div>` : ''}
+        </div>
+        <div class="det-box"><h4>Cliente e entrega</h4>
+          <strong>${esc(p.cliente_nome)}</strong> · <a href="${wa(p.cliente_telefone, '')}" target="_blank">${esc(p.cliente_telefone)}</a><br>
+          ${p.modalidade === 'retirada' ? 'Retirada na loja' : `${esc(p.endereco || '')}, ${esc(p.numero_end || 's/n')} — ${esc(p.bairro || '')}${p.complemento ? '<br>' + esc(p.complemento) : ''}${p.referencia ? '<br>Ref.: ' + esc(p.referencia) : ''}`}
+          ${p.observacoes ? `<p class="callout" style="margin:8px 0 0">${esc(p.observacoes)}</p>` : ''}
+          ${p.pedido_externo ? `<p class="form-help">Pedido no canal: <strong>${esc(p.pedido_externo)}</strong></p>` : ''}
+        </div>
+        <div class="det-box"><h4>Pagamento</h4>
+          <div class="det-linha"><span>${PAGTO[p.pagamento_forma]}${p.troco_para ? ` · troco p/ ${brl(p.troco_para)}` : ''}</span><span class="tag ${PAG_ST[p.pagamento_status].c}">${PAG_ST[p.pagamento_status].t}</span></div>
+          <div class="acoes-row" style="margin-top:8px">
+            ${p.pagamento_status === 'pendente' ? '<button class="btn btn--sm" data-pag="pago">Marcar como pago</button>' : ''}
+            ${isAdmin && ['pago', 'recebido_entregador'].includes(p.pagamento_status) ? '<button class="btn btn--sm btn--primary" data-pag="conferido">Conferir (caixa/extrato)</button>' : ''}
+            ${!isAdmin && p.pagamento_status === 'recebido_entregador' ? '<span class="form-help">Conferência feita pelo administrador</span>' : ''}
+          </div>
+        </div>
+      </div>
+      <div>
+        ${p.modalidade === 'entrega' && !['entregue', 'cancelado'].includes(p.status) ? `
+        <div class="det-box"><h4>Entregador ${maisRapido ? `· mais rápido: ${esc(maisRapido.nome)}` : ''}</h4>
+          <div class="sug" id="sug">${rank.map((r, i) => `<label><input type="radio" name="parc" value="${r.id}" data-custo="${r.custo}" ${(p.parceiro_id ? p.parceiro_id === r.id : i === 0) ? 'checked' : ''} ${r.cabe ? '' : 'disabled'}>
+            <span><strong>${esc(r.nome)}</strong><br><small>${r.prazo} min · ${r.tipo}</small> ${i === 0 && r.cabe ? '<span class="best">mais barato</span>' : ''} ${r.cabe ? '' : `<span class="nao">acima de ${r.capacidade_kg} kg</span>`}</span>
+            <strong>${brl(r.custo)}</strong></label>`).join('') || '<p class="form-help">Cadastre parceiros e custos em Entregas.</p>'}</div>
+          <div class="acoes-row" style="margin-top:10px">
+            <button class="btn btn--sm btn--primary" id="atribuir">${p.parceiro_id ? 'Trocar entregador' : 'Atribuir entregador'}</button>
+            ${p.parceiro_id ? `<a class="btn btn--sm" target="_blank" href="${wa(parceiro(p.parceiro_id)?.telefone || '', `Entrega Quintal #${p.numero}\n${p.endereco}, ${p.numero_end || 's/n'} — ${p.bairro}\n${p.pagamento_status === 'pendente' && ['pix_entrega', 'cartao_entrega', 'dinheiro'].includes(p.pagamento_forma) ? `COBRAR ${brl(p.total)} (${PAGTO[p.pagamento_forma]})` : 'Já pago'}\nSuas entregas: ${linkEntregador(parceiro(p.parceiro_id)?.token_acesso)}`)}">Avisar entregador</a>` : ''}
+          </div>
+        </div>` : ''}
+        <div class="det-box"><h4>Comunicação</h4>
+          <a class="btn btn--sm" target="_blank" href="${wa(p.cliente_telefone, msgCliente(p))}">WhatsApp ao cliente: ${STATUS[p.status].t.toLowerCase()}</a>
+          <button class="btn btn--sm" id="imprimir" style="margin-top:6px">Imprimir comanda</button>
+        </div>
+        <div class="det-box"><h4>Histórico</h4><ul class="timeline" id="tl"><li>Carregando…</li></ul>
+          <form id="f-obs" style="display:flex;gap:6px;margin-top:8px"><input class="form-control" name="obs" placeholder="Anotação interna"><button class="btn btn--sm">Salvar</button></form>
+        </div>
+      </div>
+    </div>
+    <div class="modal__actions">
+      ${!['entregue', 'cancelado'].includes(p.status) ? '<button class="btn btn--danger" id="cancelar">Cancelar pedido</button>' : ''}
+      <span style="flex:1"></span>
+      ${prox ? `<button class="btn btn--mostarda" id="avancar">${p.modalidade === 'retirada' && p.status === 'pronto' ? 'Marcar retirado' : ACAO[p.status]}</button>` : ''}
+    </div>`;
+  $('#m-det').classList.add('is-open');
+  $('#avancar')?.addEventListener('click', () => avancar(p));
+  $('#cancelar')?.addEventListener('click', () => { const m = prompt('Motivo do cancelamento:'); if (m !== null) { supabase.from('pedido_eventos').insert({ pedido_id: p.id, tipo: 'obs', ator: auth.perfil.nome, obs: 'Cancelamento: ' + m }).then(() => mudarStatus(p, 'cancelado')); } });
+  $('#atribuir')?.addEventListener('click', async () => {
+    const r = document.querySelector('#sug input:checked'); if (!r) return;
+    const { error } = await supabase.from('pedidos').update({ parceiro_id: +r.value, custo_entrega: +r.dataset.custo }).eq('id', p.id);
+    if (error) return toast(error.message, 'error');
+    toast('Entregador atribuído'); await carregar(); abrirDet(p.id);
+  });
+  document.querySelectorAll('[data-pag]').forEach(b => b.onclick = async () => {
+    const { error } = await supabase.from('pedidos').update({ pagamento_status: b.dataset.pag }).eq('id', p.id);
+    if (error) return toast(error.message, 'error');
+    toast('Pagamento atualizado'); await carregar(); abrirDet(p.id);
+  });
+  $('#imprimir').onclick = () => window.print();
+  $('#f-obs').onsubmit = async (e) => {
+    e.preventDefault(); const obs = e.target.obs.value.trim(); if (!obs) return;
+    await supabase.from('pedido_eventos').insert({ pedido_id: p.id, tipo: 'obs', ator: auth.perfil.nome, obs });
+    e.target.reset(); historico(p.id);
+  };
+  historico(p.id);
+}
+async function historico(id) {
+  const { data } = await supabase.from('pedido_eventos').select('*').eq('pedido_id', id).order('em', { ascending: false });
+  const nomeParc = (v) => parceiro(+v)?.nome || '—';
+  $('#tl').innerHTML = (data || []).map(e => `<li>${e.tipo === 'status' ? `Status: ${e.de ? STATUS[e.de]?.t + ' → ' : ''}<strong>${STATUS[e.para]?.t}</strong>`
+    : e.tipo === 'pagamento' ? `Pagamento: ${PAG_ST[e.de]?.t} → <strong>${PAG_ST[e.para]?.t}</strong>`
+    : e.tipo === 'entrega' ? `Entregador: <strong>${esc(nomeParc(e.para))}</strong>` : esc(e.obs)}
+    <small>${new Date(e.em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} · ${esc(e.ator || '')}</small></li>`).join('') || '<li>—</li>';
+}
+
+// --------- pedido externo ---------
+function linhaItem() {
+  return `<div class="form-row form-row--3 ext-item" style="grid-template-columns:2fr .7fr .9fr auto;align-items:end">
+    <select class="form-control" name="prod"><option value="">Produto…</option>${S.prods.map(p => `<option value="${p.id}" data-p="${p.preco_normal ?? ''}">${esc(p.nome)}</option>`).join('')}</select>
+    <input class="form-control" name="qtd" type="number" step="0.5" min="0.5" value="1">
+    <input class="form-control" name="preco" inputmode="decimal" placeholder="Preço un.">
+    <button type="button" class="btn btn--sm btn--danger" data-rm>×</button></div>`;
+}
+function totalExt() {
+  let t = 0; document.querySelectorAll('.ext-item').forEach(r => { t += (+r.querySelector('[name=qtd]').value || 0) * (+String(r.querySelector('[name=preco]').value).replace(',', '.') || 0); });
+  t += +String($('#f-ext').frete.value).replace(',', '.') || 0;
+  $('#ext-total').textContent = brl(t); return t;
+}
+$('#btn-externo').onclick = () => {
+  const f = $('#f-ext'); f.reset();
+  f.canal_id.innerHTML = S.canais.filter(c => c.slug !== 'site').map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join('') + '<option value="">WhatsApp / balcão</option>';
+  f.zona_id.innerHTML = '<option value="">—</option>' + S.zonas.map(z => `<option value="${z.id}">${esc(z.nome)}</option>`).join('');
+  $('#ext-itens').innerHTML = linhaItem(); totalExt();
+  $('#m-ext').classList.add('is-open');
+};
+$('#ext-add').onclick = () => { $('#ext-itens').insertAdjacentHTML('beforeend', linhaItem()); };
+$('#f-ext').addEventListener('input', (e) => {
+  if (e.target.name === 'prod') { const o = e.target.selectedOptions[0]; e.target.closest('.ext-item').querySelector('[name=preco]').value = o?.dataset.p || ''; }
+  totalExt();
+});
+$('#f-ext').addEventListener('click', (e) => { if (e.target.dataset.rm !== undefined) { e.target.closest('.ext-item').remove(); totalExt(); } });
+$('#f-ext').onsubmit = async (e) => {
+  e.preventDefault(); const f = e.target;
+  const itens = [...document.querySelectorAll('.ext-item')].map(r => {
+    const sel = r.querySelector('[name=prod]'); const q = +r.querySelector('[name=qtd]').value; const pu = +String(r.querySelector('[name=preco]').value).replace(',', '.');
+    return sel.value && q > 0 && pu >= 0 ? { produto_id: +sel.value, nome: sel.selectedOptions[0].text, quantidade: q, preco_unit: pu, total: Math.round(q * pu * 100) / 100 } : null;
+  }).filter(Boolean);
+  if (!itens.length) return toast('Adicione ao menos um item', 'error');
+  const sub = itens.reduce((s, i) => s + i.total, 0), frete = +String(f.frete.value).replace(',', '.') || 0;
+  const z = S.zonas.find(z => z.id == f.zona_id.value);
+  const forma = f.pagamento_forma.value;
+  const { data: ped, error } = await supabase.from('pedidos').insert({
+    canal_id: f.canal_id.value ? +f.canal_id.value : null, pedido_externo: f.pedido_externo.value || null,
+    cliente_nome: f.cliente_nome.value, cliente_telefone: f.cliente_telefone.value.replace(/\D/g, ''),
+    modalidade: f.modalidade.value, zona_id: z?.id || null, bairro: z?.nome || null, endereco: f.endereco.value || null,
+    pagamento_forma: forma, pagamento_status: ['marketplace', 'pix_online'].includes(forma) ? 'pago' : 'pendente',
+    subtotal: sub, frete, total: sub + frete, status: 'confirmado',
+  }).select().single();
+  if (error) return toast(error.message, 'error');
+  const { error: e2 } = await supabase.from('pedido_itens').insert(itens.map(i => ({ ...i, pedido_id: ped.id })));
+  if (e2) return toast(e2.message, 'error');
+  $('#m-ext').classList.remove('is-open'); toast(`Pedido #${ped.numero} registrado`); carregar();
+};
+
+// --------- eventos gerais ---------
+document.addEventListener('click', (e) => {
+  const av = e.target.closest('[data-avancar]');
+  if (av) { e.stopPropagation(); const p = S.peds.find(x => x.id === +av.dataset.avancar); return avancar(p); }
+  const pd = e.target.closest('[data-ped]'); if (pd) return abrirDet(+pd.dataset.ped);
+  const ab = e.target.closest('[data-aba]'); if (ab) { S.aba = ab.dataset.aba; render(); }
+  if (e.target.closest('[data-close]') || e.target.classList.contains('modal-bg')) document.querySelectorAll('.modal-bg').forEach(m => m.classList.remove('is-open'));
+});
+$('#busca').oninput = (e) => { S.busca = e.target.value; render(); };
+$('#f-canal').onchange = (e) => { S.canal = e.target.value; render(); };
+document.addEventListener('visibilitychange', () => { if (!document.hidden) document.title = 'Pedidos — Quintal Admin'; });
+
+await base(); await carregar();
+const q = new URLSearchParams(location.search).get('id'); if (q) abrirDet(+q);
+setInterval(() => { if (!document.querySelector('.modal-bg.is-open')) carregar(); }, 25000);
+</script>
+</body>
+</html>

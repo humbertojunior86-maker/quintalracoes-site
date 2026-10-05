@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Loja online — Quintal Rações e Pet Shop · Chapadão do Sul/MS</title>
+<meta name="description" content="Compre ração, petiscos e antipulgas online no Quintal Rações. Entrega no mesmo dia em Chapadão do Sul/MS. Pix, cartão ou pagamento na entrega.">
+<meta name="theme-color" content="#1A1A1A">
+<link rel="preconnect" href="https://api.fontshare.com">
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/style.css">
+<link rel="stylesheet" href="loja.css">
+<link rel="icon" type="image/png" href="../assets/logo.png">
+</head>
+<body class="loja">
+
+<div class="topbar">
+  <div class="container topbar__inner">
+    <span class="topbar__item" id="aviso-topo">Entrega no mesmo dia em Chapadão do Sul</span>
+    <span class="topbar__sep">·</span>
+    <span class="topbar__item">Pix com desconto</span>
+    <span class="topbar__sep">·</span>
+    <span class="topbar__item">Pague online ou na entrega</span>
+  </div>
+</div>
+
+<div class="homolog" id="homolog" hidden>Loja em homologação — pedidos de teste. Preços sujeitos a confirmação.</div>
+
+<header class="header lj-header">
+  <div class="container lj-header__inner">
+    <a href="../index.html" class="lj-logo" aria-label="Quintal Rações — página inicial">
+      <img src="../assets/logo-transparente.png" alt="Quintal Rações e Pet Shop" width="150" height="100">
+    </a>
+    <form class="search lj-search" id="form-busca" role="search">
+      <input type="search" name="q" id="busca" class="search__input" placeholder="Buscar ração, marca, antipulgas..." aria-label="Buscar produtos" autocomplete="off">
+      <button type="submit" class="search__btn" aria-label="Buscar">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      </button>
+    </form>
+    <button class="lj-cartbtn" id="btn-carrinho" aria-label="Abrir carrinho">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6h15l-1.5 9h-12z"/><path d="M6 6 5 3H2"/><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/></svg>
+      <span class="lj-cartbtn__label">Carrinho</span>
+      <span class="lj-cartbtn__count" id="cart-count" hidden>0</span>
+    </button>
+  </div>
+</header>
+
+<main>
+  <section class="lj-intro">
+    <div class="container lj-intro__inner">
+      <div>
+        <p class="lj-eyebrow">Loja online Quintal</p>
+        <h1 class="lj-title">Ração na sua porta, hoje.</h1>
+        <p class="lj-sub">Escolha, pague como preferir e acompanhe a entrega pelo celular. A granel pesamos na hora, do jeito que você pedir.</p>
+      </div>
+      <ul class="lj-steps" aria-label="Como funciona">
+        <li><strong>1</strong><span>Monte o carrinho</span></li>
+        <li><strong>2</strong><span>Escolha entrega ou retirada</span></li>
+        <li><strong>3</strong><span>Pix, cartão ou na entrega</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <nav class="lj-chips container" id="chips" aria-label="Filtrar por animal"></nav>
+
+  <section class="container lj-catalogo">
+    <div class="lj-catalogo__head">
+      <h2 class="section__title" id="titulo-lista">Todos os produtos</h2>
+      <select id="ordem" class="lj-select" aria-label="Ordenar">
+        <option value="relevancia">Mais relevantes</option>
+        <option value="menor">Menor preço</option>
+        <option value="maior">Maior preço</option>
+        <option value="nome">Nome A–Z</option>
+      </select>
+    </div>
+    <div class="lj-grid" id="grid" aria-live="polite">
+      <div class="lj-skel"></div><div class="lj-skel"></div><div class="lj-skel"></div><div class="lj-skel"></div>
+    </div>
+  </section>
+
+  <section class="container lj-entrega">
+    <div class="lj-entrega__card">
+      <h2>Frete por bairro, sem surpresa</h2>
+      <p>A taxa aparece antes de você finalizar. Acima do valor de frete grátis, a entrega é por nossa conta.</p>
+      <div class="lj-zonas" id="zonas"></div>
+    </div>
+  </section>
+</main>
+
+<footer class="lj-footer">
+  <div class="container lj-footer__inner">
+    <div>
+      <strong>Quintal Rações e Pet Shop</strong>
+      <span>R. Corumbá, 180 — Espatódia · Chapadão do Sul/MS</span>
+      <span>Seg a Sáb · 7h às 17h30</span>
+    </div>
+    <a class="lj-footer__whats" href="https://wa.me/5567999638298" target="_blank" rel="noopener">WhatsApp (67) 99963-8298</a>
+  </div>
+</footer>
+
+<!-- barra fixa no celular -->
+<button class="lj-mobilebar" id="mobilebar" hidden>
+  <span id="mobilebar-qtd">0 itens</span>
+  <strong id="mobilebar-total">R$ 0,00</strong>
+  <span class="lj-mobilebar__go">Ver carrinho</span>
+</button>
+
+<!-- GAVETA: carrinho + checkout -->
+<div class="lj-drawer-bg" id="drawer-bg" hidden></div>
+<aside class="lj-drawer" id="drawer" aria-hidden="true" aria-label="Carrinho e finalização">
+  <div class="lj-drawer__head">
+    <button class="lj-back" id="btn-voltar" hidden aria-label="Voltar">←</button>
+    <h2 id="drawer-titulo">Seu carrinho</h2>
+    <button class="lj-close" id="btn-fechar" aria-label="Fechar">×</button>
+  </div>
+  <ol class="lj-progress" id="progress" hidden>
+    <li data-p="1">Dados</li><li data-p="2">Entrega</li><li data-p="3">Pagamento</li>
+  </ol>
+  <div class="lj-drawer__body" id="drawer-body"></div>
+  <div class="lj-drawer__foot" id="drawer-foot"></div>
+</aside>
+
+<div class="toast-lj" id="toast" role="status" aria-live="polite"></div>
+
+<script type="module" src="loja.js"></script>
+</body>
+</html>
