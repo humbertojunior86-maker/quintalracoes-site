@@ -29,9 +29,9 @@ Deno.serve(async (req) => {
     const valorOk = Math.abs(Number(pg.transaction_amount) - Number(p.total)) < 0.01;
     if (pg.status === "approved" && valorOk && p.pagamento_status === "pendente") {
       await db.from("pedidos").update({ pagamento_status: "pago", mp_payment_id: String(pg.id) }).eq("id", p.id);
-      await db.from("pedido_eventos").insert({ pedido_id: p.id, tipo: "pagamento", de: "pendente", para: "pago", ator: "mercadopago", obs: `MP ${pg.id} · ${pg.payment_method_id}` });
+      // o gatilho pedido_audit já registra o evento de pagamento
     } else if (pg.status === "approved" && !valorOk) {
-      await db.from("pedido_eventos").insert({ pedido_id: p.id, tipo: "alerta", para: "valor_divergente", ator: "mercadopago", obs: `Pago ${pg.transaction_amount} x pedido ${p.total}` });
+      await db.from("pedido_eventos").insert({ pedido_id: p.id, tipo: "obs", para: "valor_divergente", ator: "mercadopago", obs: `Pago ${pg.transaction_amount} x pedido ${p.total}` });
     }
     return new Response("ok", { status: 200 });
   } catch (_e) {
