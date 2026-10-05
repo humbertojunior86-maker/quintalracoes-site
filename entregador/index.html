@@ -73,6 +73,7 @@ async function carregar() {
       <p class="en-sub">${esc(p.cliente)}</p>
       <div class="en-itens">${p.itens.map(esc).join('<br>')}</div>
       ${cobrar(p) ? `<div class="en-cobrar"><span>Cobrar · ${PAGTO[p.pagamento_forma]}${p.troco_para ? `<br><small>Troco para ${brl(p.troco_para)} → levar ${brl(p.troco_para - p.total)}</small>` : ''}</span><strong>${brl(p.total)}</strong></div>`
+        : p.pagamento_status === 'pendente' ? `<div class="en-cobrar"><span>${PAGTO[p.pagamento_forma]} · aguardando confirmação da loja</span><strong>Não cobrar</strong></div>`
         : `<div class="en-cobrar en-pago"><span>Pagamento</span><strong>Já pago</strong></div>`}
       ${p.status === 'entregue' ? '' : `<div class="en-acoes">
         <a class="lj-btn lj-btn--ghost" target="_blank" rel="noopener" href="${mapa(p)}">Mapa</a>

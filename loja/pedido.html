@@ -65,7 +65,7 @@ async function carregar() {
         ${p.modalidade === 'retirada' && s === 'entregue' ? 'Retirado' : STATUS[s].t}<small>${hora(quando[s])}</small></li>`).join('')}</ol>`}
     </section>
     <section class="rt__card">
-      <ul class="rt__itens">${p.itens.map(i => `<li><span>${+i.quantidade} × ${esc(i.nome)}</span><span>${brl(i.total)}</span></li>`).join('')}</ul>
+      <ul class="rt__itens">${p.itens.map(i => `<li><span>${String(+i.quantidade).replace(".", ",")}${i.unidade === "kg" ? " kg" : " ×"} ${esc(i.nome)}</span><span>${brl(i.total)}</span></li>`).join('')}</ul>
       <div class="lj-resumo">
         <div><span>Produtos</span><span>${brl(p.subtotal)}</span></div>
         <div><span>${p.modalidade === 'retirada' ? 'Retirada' : 'Entrega'}</span><span>${p.frete > 0 ? brl(p.frete) : 'Grátis'}</span></div>

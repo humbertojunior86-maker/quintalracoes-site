@@ -160,7 +160,7 @@ function parceiros() {
         ${isAdmin ? `<button class="btn btn--sm" data-edit-parc="${p.id}">Editar</button>` : ''}
       </div></div>`).join('')}</div>
     <h3 style="font-family:'Plus Jakarta Sans';margin:24px 0 6px">Custo por bairro</h3>
-    <p class="form-help" style="margin-bottom:10px">Quanto cada parceiro cobra para entregar em cada zona. É isso que o sistema usa para sugerir o mais barato.</p>
+    <p class="form-help" style="margin-bottom:10px">Em cada célula: valor da corrida (R$) em cima e prazo (min) embaixo. É isso que o sistema usa para sugerir o mais barato e o mais rápido.</p>
     <div class="table-wrap"><table class="table"><thead><tr><th>Zona</th>${S.parceiros.filter(p => p.ativo).map(p => `<th class="num">${esc(p.nome)}</th>`).join('')}</tr></thead><tbody>
       ${S.zonas.map(z => `<tr><td><strong>${esc(z.nome)}</strong><br><small class="form-help">cliente paga ${brl(z.taxa_cliente)}</small></td>${S.parceiros.filter(p => p.ativo).map(p => {
         const t = S.tabela.find(x => x.parceiro_id === p.id && x.zona_id === z.id);

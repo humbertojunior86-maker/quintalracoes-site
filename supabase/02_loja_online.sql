@@ -374,7 +374,7 @@ returns jsonb language sql stable security definer set search_path = public as $
     'cliente_nome', split_part(p.cliente_nome,' ',1),
     'entregador', (select split_part(nome,' ',1) from public.parceiros_entrega where id = p.parceiro_id),
     'prazo_min', (select prazo_min from public.zonas_entrega where id = p.zona_id),
-    'itens', (select coalesce(jsonb_agg(jsonb_build_object('nome',nome,'quantidade',quantidade,'total',total) order by id),'[]') from public.pedido_itens where pedido_id = p.id)
+    'itens', (select coalesce(jsonb_agg(jsonb_build_object('nome',i.nome,'quantidade',i.quantidade,'total',i.total,'unidade',pr.unidade) order by i.id),'[]') from public.pedido_itens i left join public.produtos pr on pr.id = i.produto_id where i.pedido_id = p.id)
   ) from public.pedidos p where p.token = p_token;
 $$;
 
@@ -393,7 +393,7 @@ returns jsonb language sql stable security definer set search_path = public as $
         'complemento', p.complemento, 'referencia', p.referencia,
         'pagamento_forma', p.pagamento_forma, 'pagamento_status', p.pagamento_status,
         'total', p.total, 'troco_para', p.troco_para, 'custo_entrega', p.custo_entrega,
-        'itens', (select coalesce(jsonb_agg(concat(trim(to_char(quantidade,'FM999990.###')),'x ',nome)),'[]') from public.pedido_itens where pedido_id = p.id)
+        'itens', (select coalesce(jsonb_agg(concat(replace(trim(to_char(i.quantidade,'FM999990.###')),'.',','), case when pr.unidade = 'kg' then ' kg ' else 'x ' end, i.nome)),'[]') from public.pedido_itens i left join public.produtos pr on pr.id = i.produto_id where i.pedido_id = p.id)
       ) order by p.rota_grupo nulls last, p.numero), '[]')
       from public.pedidos p
       where p.parceiro_id = e.id

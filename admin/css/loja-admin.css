@@ -6,7 +6,7 @@
 .tabs button .n { display: inline-block; min-width: 20px; margin-left: 6px; padding: 0 6px; border-radius: 999px; background: rgba(0,0,0,.08); font-size: 11.5px; }
 .tabs button.is-on .n { background: rgba(255,255,255,.15); }
 
-.kanban { display: grid; grid-template-columns: repeat(5, minmax(220px, 1fr)); gap: 12px; overflow-x: auto; padding-bottom: 8px; }
+.kanban { display: grid; grid-template-columns: repeat(5, minmax(190px, 1fr)); gap: 12px; overflow-x: auto; padding-bottom: 8px; }
 .kcol { background: #EFECE6; border-radius: var(--radius); padding: 10px; min-height: 200px; }
 .kcol h4 { margin: 2px 4px 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); display: flex; justify-content: space-between; }
 .kcard { background: #fff; border-radius: 8px; padding: 12px; margin-bottom: 8px; box-shadow: var(--shadow-sm); border-left: 4px solid transparent; cursor: pointer; }
@@ -15,12 +15,12 @@
 .kcard.is-warn { border-left-color: var(--mostarda); }
 .kcard__top { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
 .kcard__top strong { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 15px; }
-.kcard__t { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.kcard__t { white-space: nowrap; margin-left: auto; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .kcard__cli { font-weight: 600; margin: 6px 0 2px; }
 .kcard__meta { font-size: 12px; color: var(--muted); }
 .kcard__foot { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; gap: 6px; }
 .kcard__foot strong { font-variant-numeric: tabular-nums; }
-.canal { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 7px; border-radius: 4px; background: #F1EEE8; color: #5a5146; }
+.canal { white-space: nowrap; max-width: 92px; overflow: hidden; text-overflow: ellipsis; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 7px; border-radius: 4px; background: #F1EEE8; color: #5a5146; }
 
 .det-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; }
 .det-box { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; }
@@ -71,3 +71,6 @@
   .modal-bg { position: static !important; display: block !important; background: none !important; }
   .modal { box-shadow: none !important; max-width: none !important; }
 }
+
+.toolbar .switch input { min-width: 0; width: 18px; height: 18px; padding: 0; }
+.kcard__top { justify-content: flex-start; }
